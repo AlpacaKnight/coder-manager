@@ -8,36 +8,50 @@ use cli_tools::{CliTool, EnvCheck};
 use config::AppConfig;
 
 #[tauri::command]
-fn get_environment_check() -> EnvCheck {
-    detection::check_environment()
+async fn get_environment_check() -> Result<EnvCheck, String> {
+    tauri::async_runtime::spawn_blocking(detection::check_environment)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn get_env_check() -> EnvCheck {
-    detection::check_environment()
+async fn get_env_check() -> Result<EnvCheck, String> {
+    tauri::async_runtime::spawn_blocking(detection::check_environment)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn get_env_path(name: String) -> Option<String> {
-    detection::find_tool_path(&name)
+async fn get_env_path(name: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || detection::find_tool_path(&name))
+        .await
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn get_installed_tools() -> Vec<CliTool> {
-    let config = AppConfig::load();
-    let mut tools = detection::detect_installed_tools(&config.ignored_tools);
-    version_check::check_for_updates(&mut tools);
-    sort_tools_by_config(&mut tools, &config.tool_order);
-    tools
+async fn get_installed_tools() -> Result<Vec<CliTool>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let config = AppConfig::load();
+        let mut tools = detection::detect_installed_tools(&config.ignored_tools);
+        version_check::check_for_updates(&mut tools);
+        sort_tools_by_config(&mut tools, &config.tool_order);
+        tools
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn get_tools_quick() -> Vec<CliTool> {
-    let config = AppConfig::load();
-    let mut tools = detection::detect_installed_tools(&config.ignored_tools);
-    // 不执行版本检查，直接使用检测状态（快速返回）
-    sort_tools_by_config(&mut tools, &config.tool_order);
-    tools
+async fn get_tools_quick() -> Result<Vec<CliTool>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let config = AppConfig::load();
+        let mut tools = detection::detect_installed_tools(&config.ignored_tools);
+        // 不执行版本检查，直接使用检测状态（快速返回）
+        sort_tools_by_config(&mut tools, &config.tool_order);
+        tools
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -74,26 +88,34 @@ fn get_tool_names() -> Vec<CliTool> {
 }
 
 #[tauri::command]
-fn refresh_tools() -> Vec<CliTool> {
-    let config = AppConfig::load();
-    let mut tools = detection::detect_installed_tools(&config.ignored_tools);
-    version_check::check_for_updates(&mut tools);
-    sort_tools_by_config(&mut tools, &config.tool_order);
-    tools
+async fn refresh_tools() -> Result<Vec<CliTool>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let config = AppConfig::load();
+        let mut tools = detection::detect_installed_tools(&config.ignored_tools);
+        version_check::check_for_updates(&mut tools);
+        sort_tools_by_config(&mut tools, &config.tool_order);
+        tools
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn check_for_updates() -> Vec<CliTool> {
-    let config = AppConfig::load();
-    let mut tools = detection::detect_installed_tools(&config.ignored_tools);
-    version_check::check_for_updates(&mut tools);
+async fn check_for_updates() -> Result<Vec<CliTool>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let config = AppConfig::load();
+        let mut tools = detection::detect_installed_tools(&config.ignored_tools);
+        version_check::check_for_updates(&mut tools);
 
-    let mut config_update = config.clone();
-    config_update.update_last_check();
-    let _ = config_update.save();
+        let mut config_update = config.clone();
+        config_update.update_last_check();
+        let _ = config_update.save();
 
-    sort_tools_by_config(&mut tools, &config.tool_order);
-    tools
+        sort_tools_by_config(&mut tools, &config.tool_order);
+        tools
+    })
+    .await
+    .map_err(|e| e.to_string())
 }
 
 fn sort_tools_by_config(tools: &mut Vec<CliTool>, tool_order: &[String]) {
@@ -170,20 +192,24 @@ async fn batch_update_tools(names: Vec<String>) -> Vec<(String, Result<String, S
 }
 
 #[tauri::command]
-fn get_tool_latest_version(name: String) -> Result<Option<String>, String> {
-    let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
-    let def = definitions.into_iter().find(|d| d.name == name);
-    if let Some(def) = def {
-        match &def.latest_version_source {
-            cli_tools::LatestVersionSource::Manual => Ok(None),
-            source => {
-                let version = version_check::get_latest_version(source)?;
-                Ok(Some(version))
+async fn get_tool_latest_version(name: String) -> Result<Option<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
+        let def = definitions.into_iter().find(|d| d.name == name);
+        if let Some(def) = def {
+            match &def.latest_version_source {
+                cli_tools::LatestVersionSource::Manual => Ok(None),
+                source => {
+                    let version = version_check::get_latest_version(source)?;
+                    Ok(Some(version))
+                }
             }
+        } else {
+            Err(format!("Tool '{}' not found", name))
         }
-    } else {
-        Err(format!("Tool '{}' not found", name))
-    }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

@@ -200,6 +200,7 @@ pub fn find_tool_path(name: &str) -> Option<String> {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
 fn split_command(cmd: &str) -> (&str, Vec<&str>) {
     let parts: Vec<&str> = cmd.trim().split_whitespace().collect();
     if parts.is_empty() {

@@ -79,6 +79,17 @@ export function ToolDetail({ tool, onUpdate, onInstall, onIgnore, isUpdating }: 
           </button>
         )}
 
+        {tool.status !== 'NotInstalled' && tool.update_command && (
+          <button
+            className="btn-install-manual"
+            onClick={() => {
+              alert(`更新命令: ${tool.update_command}`);
+            }}
+          >
+            查看更新命令
+          </button>
+        )}
+
         {!tool.ignored && tool.status !== 'NotInstalled' && (
           <button
             className="btn-ignore"

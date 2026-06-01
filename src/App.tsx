@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { ToolList } from './components/ToolList';
 import { ToolDetail } from './components/ToolDetail';
@@ -6,7 +6,7 @@ import { Header } from './components/Header';
 import { StatusBar } from './components/StatusBar';
 import { Settings } from './pages/Settings';
 import { EnvDetail } from './components/EnvDetail';
-import type { CliTool, EnvCheck, AppConfig } from './types';
+import type { CliTool, EnvCheck, AppConfig, ToolStatus } from './types';
 import './App.css';
 
 interface EnvInfo {
@@ -19,11 +19,14 @@ interface EnvInfo {
   updateCommand?: string;
 }
 
+const VERSION_CHECK_CONCURRENCY = 3;
+
 function App() {
   const [tools, setTools] = useState<CliTool[]>([]);
   const [selectedTool, setSelectedTool] = useState<CliTool | null>(null);
   const [envCheck, setEnvCheck] = useState<EnvCheck | null>(null);
   const [config, setConfig] = useState<AppConfig>({ ignored_tools: [], last_check_time: null, tool_order: [] });
+  const configRef = useRef(config);
   const [showSettings, setShowSettings] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [updatingTools, setUpdatingTools] = useState<Record<string, boolean>>({});
@@ -35,6 +38,26 @@ function App() {
   // 计算全局是否在更新（供 Header 使用避免冲突）
   const isUpdating = Object.values(updatingTools).some(Boolean);
 
+  const applyConfig = useCallback((nextConfig: AppConfig) => {
+    configRef.current = nextConfig;
+    setConfig(nextConfig);
+  }, []);
+
+  const persistLastCheckTime = useCallback(async () => {
+    const nextConfig: AppConfig = {
+      ...configRef.current,
+      last_check_time: String(Math.floor(Date.now() / 1000)),
+    };
+
+    applyConfig(nextConfig);
+
+    try {
+      await invoke('save_config', { newConfig: nextConfig });
+    } catch (error) {
+      console.error('Failed to save last check time:', error);
+    }
+  }, [applyConfig]);
+
   // 封装：渐进式检查单个 CLI 工具的最新版本
   const checkSingleToolUpdate = useCallback(async (toolName: string, currentVersion: string) => {
     try {
@@ -45,7 +68,7 @@ function App() {
           if (t.name === toolName) {
             const hasLatest = latest !== null;
             const updateAvailable = hasLatest && latest !== currentVersion;
-            let nextStatus = t.status;
+            let nextStatus: ToolStatus;
             if (t.ignored) {
               nextStatus = 'Ignored';
             } else if (currentVersion === '') {
@@ -61,7 +84,7 @@ function App() {
               ...t,
               latest_version: latest,
               update_available: updateAvailable,
-              status: nextStatus as any,
+              status: nextStatus,
             };
 
             // 如果当前在详情页选中的是这个工具，也要顺便热更新一下状态
@@ -83,7 +106,7 @@ function App() {
       setTools((prevTools) =>
         prevTools.map((t) => {
           if (t.name === toolName) {
-            const nextStatus = t.current_version ? 'UpToDate' as any : 'NotInstalled' as any;
+            const nextStatus: ToolStatus = t.current_version ? 'UpToDate' : 'NotInstalled';
             const updatedTool = {
               ...t,
               status: nextStatus,
@@ -107,24 +130,35 @@ function App() {
   // 触发所有已安装工具的网络最新版本查询（纯异步并发）
   const triggerNetworkChecks = useCallback(async (currentTools: CliTool[]) => {
     setIsCheckingBackground(true);
-    
-    const checkPromises = currentTools.map(async (tool) => {
-      // 只有已安装、未忽略的最简工具才去查
-      if (tool.ignored || !tool.current_version) {
-        return;
+    const toolsToCheck = currentTools.filter((tool) => !tool.ignored && tool.current_version);
+
+    setTools((prevTools) =>
+      prevTools.map((tool) =>
+        toolsToCheck.some((candidate) => candidate.name === tool.name)
+          ? { ...tool, status: 'Checking' }
+          : tool,
+      ),
+    );
+
+    try {
+      for (let i = 0; i < toolsToCheck.length; i += VERSION_CHECK_CONCURRENCY) {
+        const batch = toolsToCheck.slice(i, i + VERSION_CHECK_CONCURRENCY);
+        await Promise.all(
+          batch.map((tool) => checkSingleToolUpdate(tool.name, tool.current_version)),
+        );
       }
-      
-      // 在状态中把它标志为 Checking，开始炫酷的加载动画
-      setTools((prevTools) =>
-        prevTools.map((t) => (t.name === tool.name ? { ...t, status: 'Checking' as any } : t))
-      );
+      await persistLastCheckTime();
+    } finally {
+      setIsCheckingBackground(false);
+    }
+  }, [checkSingleToolUpdate, persistLastCheckTime]);
 
-      await checkSingleToolUpdate(tool.name, tool.current_version);
-    });
-
-    await Promise.all(checkPromises);
-    setIsCheckingBackground(false);
-  }, [checkSingleToolUpdate]);
+  const reloadToolsFromLocal = useCallback(async (selectedName: string | null = null) => {
+    const toolsData = await invoke<CliTool[]>('get_tools_quick');
+    setTools(toolsData);
+    setSelectedTool(selectedName ? toolsData.find((tool) => tool.name === selectedName) ?? null : null);
+    await triggerNetworkChecks(toolsData);
+  }, [triggerNetworkChecks]);
 
   const loadInitialData = useCallback(async () => {
     try {
@@ -134,7 +168,7 @@ function App() {
         invoke<AppConfig>('get_config'),
       ]);
       setTools(namesTools);
-      setConfig(configData);
+      applyConfig(configData);
 
       // Phase 1.5: 异步检测顶部环境栏（不和核心列表绑定，防止 Node 等外部启动慢导致白屏卡住）
       void (async () => {
@@ -162,7 +196,7 @@ function App() {
     } catch (error) {
       console.error('Failed to load initial data:', error);
     }
-  }, [triggerNetworkChecks]);
+  }, [applyConfig, triggerNetworkChecks]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -177,25 +211,22 @@ function App() {
       setTools((prevTools) =>
         prevTools.map((t) => {
           if (!t.ignored && t.current_version) {
-            return { ...t, status: 'Checking' as any };
+            return { ...t, status: 'Checking' };
           }
           return t;
         })
       );
 
-      // 2. 并发针对各工具发送后台各自的 API 请求
-      const checkPromises = tools.map(async (tool) => {
-        if (tool.ignored || !tool.current_version) {
-          return;
-        }
-        await checkSingleToolUpdate(tool.name, tool.current_version);
-      });
+      // 2. 小批量并发针对各工具发送后台各自的 API 请求
+      const toolsToCheck = tools.filter((tool) => !tool.ignored && tool.current_version);
+      for (let i = 0; i < toolsToCheck.length; i += VERSION_CHECK_CONCURRENCY) {
+        const batch = toolsToCheck.slice(i, i + VERSION_CHECK_CONCURRENCY);
+        await Promise.all(
+          batch.map((tool) => checkSingleToolUpdate(tool.name, tool.current_version)),
+        );
+      }
 
-      await Promise.all(checkPromises);
-
-      // 更新最后检查时间属性
-      const configData = await invoke<AppConfig>('get_config');
-      setConfig(configData);
+      await persistLastCheckTime();
     } catch (error) {
       console.error('Failed to check updates:', error);
     }
@@ -204,11 +235,7 @@ function App() {
 
   const handleRefresh = async () => {
     try {
-      const toolsData = await invoke<CliTool[]>('get_tools_quick');
-      setTools(toolsData);
-      setSelectedTool(null);
-      // 刷新也自动激活后台最新版本检查
-      await triggerNetworkChecks(toolsData);
+      await reloadToolsFromLocal();
     } catch (error) {
       console.error('Failed to refresh:', error);
     }
@@ -218,7 +245,7 @@ function App() {
     setUpdatingTools(prev => ({ ...prev, [name]: true }));
     try {
       await invoke('update_tool', { name });
-      await handleCheckUpdates();
+      await reloadToolsFromLocal(name);
     } catch (error) {
       console.error('Failed to update:', error);
       alert(`更新失败: ${error}`);
@@ -243,7 +270,7 @@ function App() {
 
     try {
       await invoke('batch_update_tools', { names });
-      await handleCheckUpdates();
+      await reloadToolsFromLocal(selectedTool?.name ?? null);
     } catch (error) {
       console.error('Failed to update all:', error);
       alert(`批量更新失败: ${error}`);
@@ -265,7 +292,7 @@ function App() {
     try {
       const result = await invoke('install_tool', { name });
       console.log('Install result:', result);
-      await handleCheckUpdates();
+      await reloadToolsFromLocal(name);
     } catch (error) {
       console.error('Failed to install:', error);
       alert(`安装失败: ${error}`);
@@ -278,9 +305,8 @@ function App() {
     try {
       await invoke('ignore_tool', { toolName: name });
       const configData = await invoke<AppConfig>('get_config');
-      setConfig(configData);
-      const toolsData = await invoke<CliTool[]>('refresh_tools');
-      setTools(toolsData);
+      applyConfig(configData);
+      await reloadToolsFromLocal(name);
     } catch (error) {
       console.error('Failed to ignore:', error);
     }
@@ -290,9 +316,8 @@ function App() {
     try {
       await invoke('unignore_tool', { toolName: name });
       const configData = await invoke<AppConfig>('get_config');
-      setConfig(configData);
-      const toolsData = await invoke<CliTool[]>('refresh_tools');
-      setTools(toolsData);
+      applyConfig(configData);
+      await reloadToolsFromLocal(selectedTool?.name ?? null);
     } catch (error) {
       console.error('Failed to unignore:', error);
     }
@@ -305,9 +330,8 @@ function App() {
         await invoke('unignore_tool', { toolName: tool });
       }
       const configData = await invoke<AppConfig>('get_config');
-      setConfig(configData);
-      const toolsData = await invoke<CliTool[]>('refresh_tools');
-      setTools(toolsData);
+      applyConfig(configData);
+      await reloadToolsFromLocal(selectedTool?.name ?? null);
     } catch (error) {
       console.error('Failed to clear ignored:', error);
     }
@@ -317,7 +341,7 @@ function App() {
     try {
       await invoke('save_tool_order', { order });
       const configData = await invoke<AppConfig>('get_config');
-      setConfig(configData);
+      applyConfig(configData);
       // 用快速检测刷新列表（不查网络版本）
       const quickData = await invoke<CliTool[]>('get_tools_quick');
       setTools(quickData);

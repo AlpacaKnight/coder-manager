@@ -1,7 +1,11 @@
 use super::cli_tools::{CliTool, CliToolsRegistry, LatestVersionSource, ToolStatus};
 use regex::Regex;
 use std::collections::HashMap;
-use std::process::Command;
+use std::process::{Command, Output, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
+
+const VERSION_QUERY_TIMEOUT: Duration = Duration::from_secs(8);
 
 pub fn check_for_updates(tools: &mut [CliTool]) {
     let version_sources: HashMap<String, LatestVersionSource> = CliToolsRegistry::get_supported_tools()
@@ -95,10 +99,17 @@ pub fn get_latest_version(source: &LatestVersionSource) -> Result<String, String
 }
 
 fn get_npm_latest_version(package: &str) -> Result<String, String> {
-    let output = Command::new("npm")
-        .args(["view", package, "version", "--connect-timeout=3000", "--request-timeout=3000"])
-        .output()
-        .map_err(|e| format!("Failed to query npm: {}", e))?;
+    let output = run_command_with_timeout(
+        "npm",
+        &[
+            "view",
+            package,
+            "version",
+            "--connect-timeout=3000",
+            "--request-timeout=3000",
+        ],
+        VERSION_QUERY_TIMEOUT,
+    )?;
     
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -108,10 +119,11 @@ fn get_npm_latest_version(package: &str) -> Result<String, String> {
 }
 
 fn get_crates_latest_version(package: &str) -> Result<String, String> {
-    let output = Command::new("cargo")
-        .args(["search", package, "--limit", "1"])
-        .output()
-        .map_err(|e| format!("Failed to query crates.io: {}", e))?;
+    let output = run_command_with_timeout(
+        "cargo",
+        &["search", package, "--limit", "1"],
+        VERSION_QUERY_TIMEOUT,
+    )?;
     
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -127,10 +139,7 @@ fn get_crates_latest_version(package: &str) -> Result<String, String> {
 }
 
 fn get_rust_latest_version() -> Result<String, String> {
-    let output = Command::new("rustup")
-        .args(["show"])
-        .output()
-        .map_err(|e| format!("Failed to query rustup: {}", e))?;
+    let output = run_command_with_timeout("rustup", &["show"], VERSION_QUERY_TIMEOUT)?;
     
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
@@ -142,5 +151,36 @@ fn get_rust_latest_version() -> Result<String, String> {
             .ok_or_else(|| "Could not parse rust version".to_string())
     } else {
         Err("rustup not available".to_string())
+    }
+}
+
+fn run_command_with_timeout(
+    program: &str,
+    args: &[&str],
+    timeout: Duration,
+) -> Result<Output, String> {
+    let mut child = Command::new(program)
+        .args(args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("Failed to start {}: {}", program, e))?;
+
+    let started = Instant::now();
+    loop {
+        match child.try_wait() {
+            Ok(Some(_)) => {
+                return child
+                    .wait_with_output()
+                    .map_err(|e| format!("Failed to read {} output: {}", program, e));
+            }
+            Ok(None) if started.elapsed() >= timeout => {
+                let _ = child.kill();
+                let _ = child.wait_with_output();
+                return Err(format!("{} timed out after {}s", program, timeout.as_secs()));
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(50)),
+            Err(e) => return Err(format!("Failed to wait for {}: {}", program, e)),
+        }
     }
 }
