@@ -1,8 +1,10 @@
 interface HeaderProps {
   onCheckUpdates: () => void;
+  onUpdateAll: () => void;
   onRefresh: () => void;
   onOpenSettings: () => void;
   isChecking: boolean;
+  updateableCount: number;
   envCheck: { 
     node_available: boolean; 
     npm_available: boolean; 
@@ -16,7 +18,7 @@ interface HeaderProps {
   onEnvClick: (envName: string) => void;
 }
 
-export function Header({ onCheckUpdates, onRefresh, onOpenSettings, isChecking, envCheck, onEnvClick }: HeaderProps) {
+export function Header({ onCheckUpdates, onUpdateAll, onRefresh, onOpenSettings, isChecking, updateableCount, envCheck, onEnvClick }: HeaderProps) {
   return (
     <header className="app-header">
       <div className="header-top">
@@ -59,6 +61,13 @@ export function Header({ onCheckUpdates, onRefresh, onOpenSettings, isChecking, 
           disabled={isChecking}
         >
           {isChecking ? '检查中...' : '检查更新'}
+        </button>
+        <button
+          className="btn-secondary"
+          onClick={onUpdateAll}
+          disabled={isChecking || updateableCount === 0}
+        >
+          {updateableCount > 0 ? `更新全部 (${updateableCount})` : '更新全部'}
         </button>
         <button className="btn-secondary" onClick={onRefresh}>
           刷新

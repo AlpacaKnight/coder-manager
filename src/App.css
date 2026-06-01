@@ -401,6 +401,7 @@ body {
 .status-notinstalled { background: #e74c3c; color: white; }
 .status-ignored { background: #95a5a6; color: white; }
 .status-error { background: #c0392b; color: white; }
+.status-checking { background: #0f3460; color: white; }
 
 .detail-info {
   background: #16213e;

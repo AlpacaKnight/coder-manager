@@ -57,7 +57,11 @@ fn get_tool_names() -> Vec<CliTool> {
             update_available: false,
             can_auto_update: def.can_auto_update,
             install_command: def.install_command,
-            update_command: Some(def.update_command),
+            update_command: if def.update_command.is_empty() {
+                None
+            } else {
+                Some(def.update_command)
+            },
             ignored: ignored.contains(&def.name.to_lowercase()),
             status: cli_tools::ToolStatus::Checking,
         }
@@ -103,46 +107,83 @@ fn sort_tools_by_config(tools: &mut Vec<CliTool>, tool_order: &[String]) {
 }
 
 #[tauri::command]
-fn update_single_tool(tool: CliTool) -> Result<String, String> {
-    updater::update_tool(&tool)
+async fn update_single_tool(tool: CliTool) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        updater::update_tool(&tool)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
-fn update_tool(name: String) -> Result<String, String> {
-    let config = AppConfig::load();
-    let tools = detection::detect_installed_tools(&config.ignored_tools);
-    let tool = tools.into_iter().find(|t| t.name == name);
+async fn update_tool(name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let config = AppConfig::load();
+        let tools = detection::detect_installed_tools(&config.ignored_tools);
+        let tool = tools.into_iter().find(|t| t.name == name);
 
-    if let Some(tool) = tool {
-        updater::update_tool(&tool)
+        if let Some(tool) = tool {
+            updater::update_tool(&tool)
+        } else {
+            Err(format!("Tool '{}' not found", name))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn install_tool(name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
+        let def = definitions.into_iter().find(|d| d.name == name);
+
+        if let Some(def) = def {
+            updater::install_tool(&def)
+        } else {
+            Err(format!("Tool '{}' not found or cannot be auto-installed", name))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+async fn update_all_tools(tools: Vec<CliTool>) -> Vec<(String, Result<String, String>)> {
+    tauri::async_runtime::spawn_blocking(move || {
+        updater::batch_update_tools(tools)
+    })
+    .await
+    .unwrap_or_else(|_| vec![])
+}
+
+#[tauri::command]
+async fn batch_update_tools(names: Vec<String>) -> Vec<(String, Result<String, String>)> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let config = AppConfig::load();
+        let tools = detection::detect_installed_tools(&config.ignored_tools);
+        let selected_tools = tools.into_iter().filter(|t| names.contains(&t.name)).collect();
+        updater::batch_update_tools(selected_tools)
+    })
+    .await
+    .unwrap_or_else(|_| vec![])
+}
+
+#[tauri::command]
+fn get_tool_latest_version(name: String) -> Result<Option<String>, String> {
+    let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
+    let def = definitions.into_iter().find(|d| d.name == name);
+    if let Some(def) = def {
+        match &def.latest_version_source {
+            cli_tools::LatestVersionSource::Manual => Ok(None),
+            source => {
+                let version = version_check::get_latest_version(source)?;
+                Ok(Some(version))
+            }
+        }
     } else {
         Err(format!("Tool '{}' not found", name))
     }
-}
-
-#[tauri::command]
-fn install_tool(name: String) -> Result<String, String> {
-    let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
-    let def = definitions.into_iter().find(|d| d.name == name);
-
-    if let Some(def) = def {
-        updater::install_tool(&def)
-    } else {
-        Err(format!("Tool '{}' not found or cannot be auto-installed", name))
-    }
-}
-
-#[tauri::command]
-fn update_all_tools(tools: Vec<CliTool>) -> Vec<(String, Result<String, String>)> {
-    updater::batch_update_tools(tools)
-}
-
-#[tauri::command]
-fn batch_update_tools(names: Vec<String>) -> Vec<(String, Result<String, String>)> {
-    let config = AppConfig::load();
-    let tools = detection::detect_installed_tools(&config.ignored_tools);
-    let selected_tools = tools.into_iter().filter(|t| names.contains(&t.name)).collect();
-    updater::batch_update_tools(selected_tools)
 }
 
 #[tauri::command]
@@ -196,6 +237,7 @@ pub fn run() {
             get_installed_tools,
             get_tools_quick,
             get_tool_names,
+            get_tool_latest_version,
             refresh_tools,
             check_for_updates,
             update_single_tool,

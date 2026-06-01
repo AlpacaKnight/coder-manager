@@ -170,6 +170,7 @@ pub struct CliToolDefinition {
 }
 
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum LatestVersionSource {
     Npm(String),
     CratesIo(String),

@@ -1,4 +1,5 @@
 use super::cli_tools::{CliTool, CliToolDefinition, CliToolsRegistry, EnvCheck, ToolStatus};
+use regex::Regex;
 use std::process::Command;
 
 pub fn check_environment() -> EnvCheck {
@@ -91,7 +92,7 @@ fn detect_tool(definition: &CliToolDefinition, ignored: &[String]) -> CliTool {
             update_available: false,
             can_auto_update: definition.can_auto_update,
             install_command: definition.install_command.clone(),
-            update_command: Some(definition.update_command.clone()),
+            update_command: command_option(&definition.update_command),
             ignored: is_ignored,
             status: if is_ignored { ToolStatus::Ignored } else { ToolStatus::UpToDate },
         }
@@ -106,7 +107,7 @@ fn detect_tool(definition: &CliToolDefinition, ignored: &[String]) -> CliTool {
             update_available: false,
             can_auto_update: definition.can_auto_update,
             install_command: definition.install_command.clone(),
-            update_command: Some(definition.update_command.clone()),
+            update_command: command_option(&definition.update_command),
             ignored: is_ignored,
             status: if is_ignored { ToolStatus::Ignored } else { ToolStatus::NotInstalled },
         }
@@ -120,14 +121,33 @@ fn get_tool_version(definition: &CliToolDefinition) -> Option<String> {
     let stderr = String::from_utf8_lossy(&output.stderr);
     let output_text = if !stdout.is_empty() { &stdout } else { &stderr };
     
+    let regex = Regex::new(&definition.version_regex).ok();
+
     for line in output_text.lines() {
         let trimmed = line.trim();
         if !trimmed.is_empty() {
+            if let Some(regex) = &regex {
+                if let Some(version) = regex
+                    .captures(trimmed)
+                    .and_then(|captures| captures.get(1))
+                    .map(|match_| match_.as_str().to_string())
+                {
+                    return Some(version);
+                }
+            }
             return Some(trimmed.to_string());
         }
     }
     
     None
+}
+
+fn command_option(command: &str) -> Option<String> {
+    if command.is_empty() {
+        None
+    } else {
+        Some(command.to_string())
+    }
 }
 
 fn run_command(cmd_str: &str) -> Option<std::process::Output> {

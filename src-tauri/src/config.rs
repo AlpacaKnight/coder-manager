@@ -50,9 +50,6 @@ impl AppConfig {
         self.tool_order = order;
     }
 
-    pub fn update_tool_order(&mut self, new_order: Vec<String>) {
-        self.tool_order = new_order;
-    }
 }
 
 fn get_config_path() -> PathBuf {

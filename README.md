@@ -76,7 +76,7 @@ npm run tauri dev
 ```
 
 这将启动：
-- Vite 开发服务器（http://localhost:5173）
+- Vite 开发服务器（http://127.0.0.1:5173）
 - Tauri 桌面应用窗口
 
 ### 构建生产版本

@@ -11,10 +11,21 @@ interface ToolDetailProps {
 const statusLabels: Record<string, string> = {
   UpToDate: '已是最新版本',
   UpdateAvailable: '有可用更新',
-  ManualUpdate: '需要手动更新',
+  ManualUpdate: '需手动检查',
   NotInstalled: '未安装',
   Ignored: '已忽略',
   Error: '检查出错',
+  Checking: '检查中',
+};
+
+const statusClasses: Record<string, string> = {
+  UpToDate: 'updated',
+  UpdateAvailable: 'updateavailable',
+  ManualUpdate: 'manualupdate',
+  NotInstalled: 'notinstalled',
+  Ignored: 'ignored',
+  Error: 'error',
+  Checking: 'checking',
 };
 
 export function ToolDetail({ tool, onUpdate, onInstall, onIgnore, isUpdating }: ToolDetailProps) {
@@ -26,7 +37,7 @@ export function ToolDetail({ tool, onUpdate, onInstall, onIgnore, isUpdating }: 
     <div className="tool-detail">
       <div className="detail-header">
         <h2>{tool.display_name}</h2>
-        <span className={`status-badge status-${tool.status.toLowerCase()}`}>
+        <span className={`status-badge status-${statusClasses[tool.status]}`}>
           {statusLabels[tool.status]}
         </span>
       </div>

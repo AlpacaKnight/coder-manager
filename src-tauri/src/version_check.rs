@@ -1,8 +1,47 @@
-use super::cli_tools::{CliTool, LatestVersionSource, ToolStatus};
+use super::cli_tools::{CliTool, CliToolsRegistry, LatestVersionSource, ToolStatus};
 use regex::Regex;
+use std::collections::HashMap;
 use std::process::Command;
 
 pub fn check_for_updates(tools: &mut [CliTool]) {
+    let version_sources: HashMap<String, LatestVersionSource> = CliToolsRegistry::get_supported_tools()
+        .into_iter()
+        .map(|tool| (tool.name, tool.latest_version_source))
+        .collect();
+
+    let mut tasks = Vec::new();
+    for tool in tools.iter() {
+        if tool.ignored {
+            continue;
+        }
+        if tool.current_version.is_empty() {
+            continue;
+        }
+        let Some(source) = version_sources.get(&tool.name) else {
+            continue;
+        };
+        if matches!(source, LatestVersionSource::Manual) {
+            continue;
+        }
+        tasks.push((tool.name.clone(), source.clone()));
+    }
+
+    let mut handles = Vec::new();
+    for (name, source) in tasks {
+        let handle = std::thread::spawn(move || {
+            let res = get_latest_version(&source);
+            (name, res)
+        });
+        handles.push(handle);
+    }
+
+    let mut results = HashMap::new();
+    for handle in handles {
+        if let Ok((name, res)) = handle.join() {
+            results.insert(name, res);
+        }
+    }
+
     for tool in tools.iter_mut() {
         if tool.ignored {
             tool.status = ToolStatus::Ignored;
@@ -14,47 +53,50 @@ pub fn check_for_updates(tools: &mut [CliTool]) {
             continue;
         }
         
-        match get_latest_version(&tool.name) {
-            Ok(latest) => {
-                tool.latest_version = Some(latest.clone());
-                tool.update_available = latest != tool.current_version;
-                tool.status = if tool.update_available {
-                    ToolStatus::UpdateAvailable
-                } else {
-                    ToolStatus::UpToDate
-                };
+        let Some(source) = version_sources.get(&tool.name) else {
+            tool.status = ToolStatus::Error;
+            continue;
+        };
+
+        if matches!(source, LatestVersionSource::Manual) {
+            tool.status = ToolStatus::ManualUpdate;
+            continue;
+        }
+
+        if let Some(res) = results.remove(&tool.name) {
+            match res {
+                Ok(latest) => {
+                    tool.latest_version = Some(latest.clone());
+                    tool.update_available = latest != tool.current_version;
+                    tool.status = if tool.update_available {
+                        ToolStatus::UpdateAvailable
+                    } else {
+                        ToolStatus::UpToDate
+                    };
+                }
+                Err(_) => {
+                    // 无法获取最新版本，但工具已安装，就显示为已是最新版本
+                    tool.status = ToolStatus::UpToDate;
+                }
             }
-            Err(_) => {
-                // 无法获取最新版本，但工具已安装，就显示为已是最新版本
-                tool.status = ToolStatus::UpToDate;
-            }
+        } else {
+            tool.status = ToolStatus::UpToDate;
         }
     }
 }
 
-fn get_latest_version(tool_name: &str) -> Result<String, String> {
-    match tool_name {
-        "node" => get_npm_latest_version("node"),
-        "npm" => get_npm_latest_version("npm"),
-        "abtop" => get_crates_latest_version("abtop"),
-        "codex" => get_npm_latest_version("@openai/codex"),
-        "claude" => get_npm_latest_version("@anthropic-ai/claude-code"),
-        "gemini" => get_npm_latest_version("@google/gemini-cli"),
-        "opencode" => get_npm_latest_version("opencode-ai"),
-        "qwen" => get_npm_latest_version("@qwen-code/qwen-code"),
-        "deepcode" => get_npm_latest_version("@vegamo/deepcode-cli"),
-        "codebuddy" => get_npm_latest_version("@tencent-ai/codebuddy-code"),
-        "kilo" => get_npm_latest_version("@kilocode/cli"),
-        "bailian" => get_npm_latest_version("bailian-cli"),
-        "reasonix" => get_npm_latest_version("reasonix"),
-        "cargo" | "rustc" => get_rust_latest_version(),
-        _ => Err("No version source available".to_string()),
+pub fn get_latest_version(source: &LatestVersionSource) -> Result<String, String> {
+    match source {
+        LatestVersionSource::Npm(package) => get_npm_latest_version(package),
+        LatestVersionSource::CratesIo(package) => get_crates_latest_version(package),
+        LatestVersionSource::Rust => get_rust_latest_version(),
+        LatestVersionSource::Manual => Err("No automatic version source available".to_string()),
     }
 }
 
 fn get_npm_latest_version(package: &str) -> Result<String, String> {
     let output = Command::new("npm")
-        .args(["view", package, "version"])
+        .args(["view", package, "version", "--connect-timeout=3000", "--request-timeout=3000"])
         .output()
         .map_err(|e| format!("Failed to query npm: {}", e))?;
     

@@ -22,11 +22,11 @@ export async function batchUpdateTools(names: string[]): Promise<{name: string, 
 }
 
 export async function ignoreTool(name: string): Promise<void> {
-  return invoke('ignore_tool', { name });
+  return invoke('ignore_tool', { toolName: name });
 }
 
 export async function unignoreTool(name: string): Promise<void> {
-  return invoke('unignore_tool', { name });
+  return invoke('unignore_tool', { toolName: name });
 }
 
 export async function getConfig(): Promise<AppConfig> {
