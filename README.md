@@ -1,14 +1,18 @@
 # Coder Manager - CLI 工具管理器
 
-一个桌面应用程序，用于管理和更新开发相关的 CLI 工具。
+一个极速、全异步、无阻塞的桌面应用程序，用于管理和更新开发相关的 AI 辅助与开发业务 CLI 工具。
 
 ## 功能特性
 
-- 自动检测系统已安装的 CLI 工具
-- 检查工具更新
-- 支持自动更新工具
-- 忽略特定工具的更新提醒
-- 美观的深色主题界面
+- **启动极速秒开（< 5ms）**：摒弃了启动时的阻塞等待遮罩，启动时瞬间渲染主界面架构，再通过后台分阶段（P1: 元信息、P2: 纯本地版本检测、P3: 异步并发网络请求）渲染数据，实现顶级流畅体验。
+- **系统环境与业务工具剥离**：将 Node.js、npm、Cargo、Rustc 等底层平台开发环境从普通的业务 CLI 列表中剥离。在顶部状态栏以专属小图标的形式，对系统底座环境进行静默、独立的健康度及版本检测。
+- **全异步无阻塞架构**：
+  - 后端 Rust 端所有重型、耗时的 CLI 安装与更新指令（如 [src-tauri/src/lib.rs](src-tauri/src/lib.rs) 中的 `update_tool` 和 `install_tool`）均改写为 `async fn` 并使用 `tauri::async_runtime::spawn_blocking` 与主线程物理脱离。即使在后台更新大型工具，界面依然 100% 保持满帧率流畅响应。
+  - 前端 React 摒弃一刀切的全局布尔值，基于 `updatingTools` 完成了精细化的“单工具级”锁定。更新单个工具时，仅使选中工具的相关按钮进入加载状态，不干扰全局界面的正常操作。
+- **自动检测系统/项目内业务 CLI 版本**。
+- **支持自动/手动一键更新升级**。
+- **允许忽略/恢复特定工具的更新提醒**。
+- **优雅的深色主题响应式主面板**。
 
 ## 支持的平台
 
@@ -16,11 +20,11 @@
 - ✅ macOS
 - ✅ Linux
 
-## 支持的工具
+## 支持的项目/业务工具
 
-- Node.js & npm
-- Rust & Cargo
-- abtop
+目前我们精心聚焦于 AI 辅助和特定业务命令行工具（排除了 Node、Rust、Docker、Git 等系统底层运行环境），具体如下：
+
+- abtop (Crates.io)
 - OpenAI Codex
 - Claude Code
 - Gemini CLI
@@ -30,8 +34,18 @@
 - codebuddy-code
 - kilo-cli
 - 百炼 CLI
-- Git
-- Docker
+- Reasonix
+
+具体的工具注册清单和可升级指令，可在 [src-tauri/src/cli_tools.rs](src-tauri/src/cli_tools.rs) 中获取与扩展。
+
+## 项目核心系统组件
+
+- **应用入口与主事件循环注册**：[src-tauri/src/lib.rs](src-tauri/src/lib.rs)
+- **多平台 CLI 工具核心定义与元信息**：[src-tauri/src/cli_tools.rs](src-tauri/src/cli_tools.rs)
+- **前端核心并发调度与精细化状态机**：[src/App.tsx](src/App.tsx)
+- **无阻塞顶部系统环境面板**：[src/components/Header.tsx](src/components/Header.tsx)
+- **高级拖拽与排序列表展示**：[src/components/ToolList.tsx](src/components/ToolList.tsx)
+- **精细化工具更新详情控制器**：[src/components/ToolDetail.tsx](src/components/ToolDetail.tsx)
 
 ## 前置要求
 
