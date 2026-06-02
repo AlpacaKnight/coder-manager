@@ -69,6 +69,41 @@ body {
   align-items: center;
 }
 
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.github-link-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  flex: 0 0 auto;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  background: #0f3460;
+  color: #eaeaea;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.github-link-btn:hover {
+  background: #1a4a7a;
+  border-color: #1a4a7a;
+  transform: translateY(-1px);
+}
+
+.github-icon {
+  display: block;
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
 .app-header h1 {
   font-size: 20px;
   color: #e94560;
@@ -437,10 +472,11 @@ body {
 
 .detail-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
-.btn-update, .btn-ignore, .btn-install {
+.btn-update, .btn-ignore, .btn-install, .btn-uninstall {
   padding: 12px 24px;
   border: none;
   border-radius: 6px;
@@ -470,6 +506,25 @@ body {
 
 .btn-ignore:hover {
   background: #1a4a7a;
+}
+
+.btn-ignore:disabled {
+  background: #666;
+  cursor: not-allowed;
+}
+
+.btn-uninstall {
+  background: #c0392b;
+  color: white;
+}
+
+.btn-uninstall:hover {
+  background: #a93226;
+}
+
+.btn-uninstall:disabled {
+  background: #666;
+  cursor: not-allowed;
 }
 
 .btn-install {

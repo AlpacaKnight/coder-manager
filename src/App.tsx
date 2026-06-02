@@ -21,6 +21,8 @@ interface EnvInfo {
 
 const VERSION_CHECK_CONCURRENCY = 3;
 
+type ToolAction = 'update' | 'install' | 'uninstall';
+
 function App() {
   const [tools, setTools] = useState<CliTool[]>([]);
   const [selectedTool, setSelectedTool] = useState<CliTool | null>(null);
@@ -30,6 +32,7 @@ function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [isChecking, setIsChecking] = useState(false);
   const [updatingTools, setUpdatingTools] = useState<Record<string, boolean>>({});
+  const [toolActions, setToolActions] = useState<Record<string, ToolAction>>({});
   const [selectedEnv, setSelectedEnv] = useState<EnvInfo | null>(null);
   const [isInstalling] = useState(false);
   const [isEnvUpdating] = useState(false);
@@ -37,6 +40,18 @@ function App() {
 
   // 计算全局是否在更新（供 Header 使用避免冲突）
   const isUpdating = Object.values(updatingTools).some(Boolean);
+
+  const setToolAction = useCallback((name: string, action: ToolAction | null) => {
+    setToolActions((prev) => {
+      if (action) {
+        return { ...prev, [name]: action };
+      }
+
+      const next = { ...prev };
+      delete next[name];
+      return next;
+    });
+  }, []);
 
   const applyConfig = useCallback((nextConfig: AppConfig) => {
     configRef.current = nextConfig;
@@ -243,6 +258,7 @@ function App() {
 
   const handleUpdate = async (name: string) => {
     setUpdatingTools(prev => ({ ...prev, [name]: true }));
+    setToolAction(name, 'update');
     try {
       await invoke('update_tool', { name });
       await reloadToolsFromLocal(name);
@@ -251,6 +267,7 @@ function App() {
       alert(`更新失败: ${error}`);
     } finally {
       setUpdatingTools(prev => ({ ...prev, [name]: false }));
+      setToolAction(name, null);
     }
   };
 
@@ -263,10 +280,13 @@ function App() {
 
     // 将所有这些工具标记为更新中
     const updateStarted: Record<string, boolean> = {};
+    const actionStarted: Record<string, ToolAction> = {};
     names.forEach(name => {
       updateStarted[name] = true;
+      actionStarted[name] = 'update';
     });
     setUpdatingTools(prev => ({ ...prev, ...updateStarted }));
+    setToolActions(prev => ({ ...prev, ...actionStarted }));
 
     try {
       await invoke('batch_update_tools', { names });
@@ -280,6 +300,13 @@ function App() {
         updateFinished[name] = false;
       });
       setUpdatingTools(prev => ({ ...prev, ...updateFinished }));
+      setToolActions((prev) => {
+        const next = { ...prev };
+        names.forEach(name => {
+          delete next[name];
+        });
+        return next;
+      });
     }
   };
 
@@ -289,6 +316,7 @@ function App() {
 
   const handleInstall = async (name: string) => {
     setUpdatingTools(prev => ({ ...prev, [name]: true }));
+    setToolAction(name, 'install');
     try {
       const result = await invoke('install_tool', { name });
       console.log('Install result:', result);
@@ -298,6 +326,30 @@ function App() {
       alert(`安装失败: ${error}`);
     } finally {
       setUpdatingTools(prev => ({ ...prev, [name]: false }));
+      setToolAction(name, null);
+    }
+  };
+
+  const handleUninstall = async (name: string) => {
+    const tool = tools.find((item) => item.name === name);
+    const displayName = tool?.display_name ?? name;
+
+    if (!window.confirm(`确定要卸载 ${displayName} 吗？卸载会移除该 CLI 工具。`)) {
+      return;
+    }
+
+    setUpdatingTools(prev => ({ ...prev, [name]: true }));
+    setToolAction(name, 'uninstall');
+    try {
+      const result = await invoke('uninstall_tool', { name });
+      console.log('Uninstall result:', result);
+      await reloadToolsFromLocal(name);
+    } catch (error) {
+      console.error('Failed to uninstall:', error);
+      alert(`卸载失败: ${error}`);
+    } finally {
+      setUpdatingTools(prev => ({ ...prev, [name]: false }));
+      setToolAction(name, null);
     }
   };
 
@@ -444,8 +496,10 @@ function App() {
           tool={selectedTool}
           onUpdate={handleUpdate}
           onInstall={handleInstall}
+          onUninstall={handleUninstall}
           onIgnore={handleIgnore}
           isUpdating={selectedTool ? !!updatingTools[selectedTool.name] : false}
+          activeAction={selectedTool ? toolActions[selectedTool.name] ?? null : null}
         />
       </main>
       

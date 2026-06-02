@@ -1,4 +1,4 @@
-use super::cli_tools::{CliTool, CliToolDefinition};
+use super::cli_tools::{CliTool, CliToolDefinition, LatestVersionSource};
 use std::process::Command;
 
 pub fn update_tool(tool: &CliTool) -> Result<String, String> {
@@ -54,6 +54,41 @@ pub fn install_tool(tool: &CliToolDefinition) -> Result<String, String> {
         } else {
             Err(stderr)
         }
+    }
+}
+
+pub fn uninstall_tool(tool: &CliToolDefinition) -> Result<String, String> {
+    let uninstall_cmd = get_uninstall_command(tool)?;
+
+    let output = if cfg!(target_os = "windows") {
+        Command::new("cmd")
+            .arg("/c")
+            .arg(&uninstall_cmd)
+            .output()
+    } else {
+        let (program, args) = split_command(&uninstall_cmd);
+        Command::new(program)
+            .args(&args)
+            .output()
+    }.map_err(|e| format!("Failed to execute uninstall: {}", e))?;
+
+    if output.status.success() {
+        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        if stderr.is_empty() {
+            Err(format!("Uninstall failed for '{}'", tool.name))
+        } else {
+            Err(stderr)
+        }
+    }
+}
+
+fn get_uninstall_command(tool: &CliToolDefinition) -> Result<String, String> {
+    match &tool.latest_version_source {
+        LatestVersionSource::Npm(package) => Ok(format!("npm uninstall -g {}", package)),
+        LatestVersionSource::CratesIo(crate_name) => Ok(format!("cargo uninstall {}", crate_name)),
+        _ => Err(format!("Tool '{}' cannot be auto-uninstalled", tool.name)),
     }
 }
 

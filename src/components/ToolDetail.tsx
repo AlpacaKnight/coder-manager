@@ -4,8 +4,10 @@ interface ToolDetailProps {
   tool: CliTool | null;
   onUpdate: (name: string) => void;
   onInstall?: (name: string) => void;
+  onUninstall?: (name: string) => void;
   onIgnore: (name: string) => void;
   isUpdating: boolean;
+  activeAction?: 'update' | 'install' | 'uninstall' | null;
 }
 
 const statusLabels: Record<string, string> = {
@@ -28,10 +30,14 @@ const statusClasses: Record<string, string> = {
   Checking: 'checking',
 };
 
-export function ToolDetail({ tool, onUpdate, onInstall, onIgnore, isUpdating }: ToolDetailProps) {
+export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, isUpdating, activeAction }: ToolDetailProps) {
   if (!tool) {
     return <div className="tool-detail empty">选择一个工具查看详情</div>;
   }
+
+  const currentAction = activeAction ?? null;
+  const isBusy = isUpdating || currentAction !== null;
+  const isInstalled = tool.status !== 'NotInstalled' && Boolean(tool.current_version);
 
   return (
     <div className="tool-detail">
@@ -69,17 +75,17 @@ export function ToolDetail({ tool, onUpdate, onInstall, onIgnore, isUpdating }: 
       </div>
       
       <div className="detail-actions">
-        {tool.status !== 'NotInstalled' && !tool.ignored && tool.can_auto_update && (
+        {isInstalled && !tool.ignored && tool.can_auto_update && (
           <button
             className="btn-update"
             onClick={() => onUpdate(tool.name)}
-            disabled={isUpdating}
+            disabled={isBusy}
           >
-            {isUpdating ? '更新中...' : '更新'}
+            {currentAction === 'update' ? '更新中...' : '更新'}
           </button>
         )}
 
-        {tool.status !== 'NotInstalled' && tool.update_command && (
+        {isInstalled && tool.update_command && (
           <button
             className="btn-install-manual"
             onClick={() => {
@@ -90,10 +96,21 @@ export function ToolDetail({ tool, onUpdate, onInstall, onIgnore, isUpdating }: 
           </button>
         )}
 
-        {!tool.ignored && tool.status !== 'NotInstalled' && (
+        {isInstalled && !tool.ignored && (
+          <button
+            className="btn-uninstall"
+            onClick={() => onUninstall?.(tool.name)}
+            disabled={isBusy}
+          >
+            {currentAction === 'uninstall' ? '卸载中...' : '卸载'}
+          </button>
+        )}
+
+        {isInstalled && !tool.ignored && (
           <button
             className="btn-ignore"
             onClick={() => onIgnore(tool.name)}
+            disabled={isBusy}
           >
             忽略
           </button>
@@ -104,9 +121,9 @@ export function ToolDetail({ tool, onUpdate, onInstall, onIgnore, isUpdating }: 
             <button
               className="btn-install"
               onClick={() => onInstall?.(tool.name)}
-              disabled={isUpdating || !tool.can_auto_update}
+              disabled={isBusy || !tool.can_auto_update}
             >
-              {isUpdating ? '安装中...' : '执行安装'}
+              {currentAction === 'install' ? '安装中...' : '执行安装'}
             </button>
             <button
               className="btn-install-manual"

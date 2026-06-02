@@ -6,6 +6,28 @@ mod version_check;
 
 use cli_tools::{CliTool, EnvCheck};
 use config::AppConfig;
+use std::process::Command;
+
+const GITHUB_HOMEPAGE: &str = "https://github.com/AlpacaKnight/coder-manager";
+
+#[tauri::command]
+fn open_github_homepage() -> Result<(), String> {
+    let mut command = if cfg!(target_os = "windows") {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", "", GITHUB_HOMEPAGE]);
+        command
+    } else if cfg!(target_os = "macos") {
+        let mut command = Command::new("open");
+        command.arg(GITHUB_HOMEPAGE);
+        command
+    } else {
+        let mut command = Command::new("xdg-open");
+        command.arg(GITHUB_HOMEPAGE);
+        command
+    };
+
+    command.spawn().map(|_| ()).map_err(|e| e.to_string())
+}
 
 #[tauri::command]
 async fn get_environment_check() -> Result<EnvCheck, String> {
@@ -171,6 +193,22 @@ async fn install_tool(name: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+async fn uninstall_tool(name: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
+        let def = definitions.into_iter().find(|d| d.name == name);
+
+        if let Some(def) = def {
+            updater::uninstall_tool(&def)
+        } else {
+            Err(format!("Tool '{}' not found", name))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
 async fn update_all_tools(tools: Vec<CliTool>) -> Vec<(String, Result<String, String>)> {
     tauri::async_runtime::spawn_blocking(move || {
         updater::batch_update_tools(tools)
@@ -264,11 +302,13 @@ pub fn run() {
             get_tools_quick,
             get_tool_names,
             get_tool_latest_version,
+            open_github_homepage,
             refresh_tools,
             check_for_updates,
             update_single_tool,
             update_tool,
             install_tool,
+            uninstall_tool,
             update_all_tools,
             batch_update_tools,
             get_config,
