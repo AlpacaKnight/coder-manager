@@ -65,4 +65,5 @@ export interface ModelDisplay {
   protocol: 'openai' | 'anthropic';
   source: 'existing' | 'provider';
   provider_id?: string;
+  index?: number;
 }

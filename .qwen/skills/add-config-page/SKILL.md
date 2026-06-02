@@ -484,6 +484,186 @@ This ensures:
 - Home → Provider Management → back → Home
 - Model Config → Provider Management → back → Model Config
 
+### Variant: Inline Editing for List Items
+
+When a list displays items from multiple sources (e.g., existing external config entries + app-managed entries), only items from certain sources should be editable. Use a state-driven inline edit pattern.
+
+**Critical: Use array-index-based keys, not item-ID-based keys.** If two items in the same array share the same ID (e.g., two models with `id: "model"`), ID-based keys cause React key collisions and `find` by ID returns the wrong item. Index-based keys are always unique and allow direct array access.
+
+**Type — add `index` field to display item:**
+
+```typescript
+export interface ModelDisplay {
+  key: string;           // "existing:openai:0", "existing:anthropic:2", "provider:xxx"
+  model_name: string;
+  display_name: string;
+  protocol: 'openai' | 'anthropic';
+  source: 'existing' | 'provider';
+  provider_id?: string;
+  index?: number;        // array index in existingOpenai/existingAnthropic
+}
+```
+
+**State setup:**
+
+```tsx
+const [editingKey, setEditingKey] = useState<string | null>(null);
+const [editForm, setEditForm] = useState({ name: '', id: '', baseUrl: '', envKey: '' });
+```
+
+**Key generation — use array index:**
+
+```tsx
+// In loadData — index-based selectedKeys
+const keys = new Set<string>();
+for (let i = 0; i < oai.length; i++) keys.add(`existing:openai:${i}`);
+for (let i = 0; i < ant.length; i++) keys.add(`existing:anthropic:${i}`);
+setSelectedKeys(keys);
+
+// In modelList useMemo — index-based keys with index field
+for (let i = 0; i < existingOpenai.length; i++) {
+  const m = existingOpenai[i];
+  result.push({
+    key: `existing:openai:${i}`,
+    model_name: m.id,
+    display_name: m.name,
+    protocol: 'openai',
+    source: 'existing',
+    index: i,
+  });
+}
+```
+
+**Handlers — use `item.index` for direct array access (no `find`):**
+
+```tsx
+const handleEditStart = (item: ModelDisplay) => {
+  if (item.source !== 'existing' || item.index === undefined) return;
+  const existingModels = item.protocol === 'openai' ? existingOpenai : existingAnthropic;
+  const found = existingModels[item.index];
+  if (!found) return;
+  setEditingKey(item.key);
+  setEditForm({ name: found.name, id: found.id, baseUrl: found.baseUrl, envKey: found.envKey });
+};
+
+const handleEditCancel = () => setEditingKey(null);
+
+// Parse index from key, update by index — no selectedKeys migration needed
+const handleEditSave = (protocol: 'openai' | 'anthropic') => {
+  const idx = editingKey ? parseInt(editingKey.split(':').pop()!, 10) : -1;
+  if (idx < 0) return;
+  const updateModels = protocol === 'openai' ? setExistingOpenai : setExistingAnthropic;
+  updateModels((prev) =>
+    prev.map((m, i) => {
+      if (i !== idx) return m;
+      return { ...m, id: editForm.id, name: editForm.name, baseUrl: editForm.baseUrl, envKey: editForm.envKey };
+    }),
+  );
+  setEditingKey(null);
+};
+```
+
+**Preview and register — use `item.index` for lookup:**
+
+```tsx
+// In preview useMemo and handleRegister:
+for (const item of modelList) {
+  if (!selectedKeys.has(item.key)) continue;
+  if (item.source === 'existing' && item.index !== undefined) {
+    const existingModels = item.protocol === 'openai' ? existingOpenai : existingAnthropic;
+    const found = existingModels[item.index];
+    if (found) {
+      if (item.protocol === 'openai') keepOpenai.push(found);
+      else keepAnthropic.push(found);
+    }
+  } else if (item.provider_id) {
+    newProviderIds.push(item.provider_id);
+  }
+}
+```
+
+**Rendering** — conditionally swap between edit form and normal row:
+
+```tsx
+{modelList.map((item) => {
+  // Edit mode: inline form replaces the row
+  if (editingKey === item.key && item.source === 'existing') {
+    return (
+      <div key={item.key} className="provider-edit-form">
+        <div className="provider-edit-row">
+          <input className="model-config-input" placeholder="显示名称"
+            value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} />
+          <input className="model-config-input" placeholder="模型 ID"
+            value={editForm.id} onChange={(e) => setEditForm((f) => ({ ...f, id: e.target.value }))} />
+        </div>
+        <div className="provider-edit-row">
+          <input className="model-config-input" placeholder="Base URL"
+            value={editForm.baseUrl} onChange={(e) => setEditForm((f) => ({ ...f, baseUrl: e.target.value }))} />
+          <input className="model-config-input" placeholder="环境变量 Key"
+            value={editForm.envKey} onChange={(e) => setEditForm((f) => ({ ...f, envKey: e.target.value }))} />
+        </div>
+        <div className="provider-edit-actions">
+          <button className="btn-add-provider" onClick={() => handleEditSave(item.protocol)}>保存</button>
+          <button className="btn-link-action" onClick={handleEditCancel}>取消</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Normal mode: label row with optional edit button
+  return (
+    <label key={item.key} className="provider-select-item">
+      {/* checkbox, info, protocol tag, source badge ... */}
+      {item.source === 'existing' && !editingKey && (
+        <button className="btn-provider-edit"
+          onClick={(e) => { e.preventDefault(); handleEditStart(item); }} title="编辑">✎</button>
+      )}
+    </label>
+  );
+})}
+```
+
+**Key rules:**
+- **Always use array index in the key** (`existing:openai:0`) — never use the item's ID (`existing:openai:gpt-4`) which can collide
+- **Use `item.index` for direct array access** — never `find` by ID which returns wrong items when IDs are duplicated
+- **No `selectedKeys` migration needed** when ID changes — index-based keys are stable regardless of content changes
+- Edit button only appears when no other item is being edited (`!editingKey`) — prevents confusion
+- `editForm` is populated on edit start; changes are local until "保存"
+- Saving updates the parent state array by index, which triggers `useMemo` recomputation of the preview
+- Use `e.preventDefault()` on the edit button since it's inside a `<label>` to avoid toggling the checkbox
+
+**Error recovery in `loadData`:** When `invoke` fails, reset all dependent state in the `catch` block so the UI doesn't get stuck in loading state:
+
+```tsx
+catch (err) {
+  console.error('Failed to load data:', err);
+  setCurrentSettings({});
+  setExistingOpenai([]);
+  setExistingAnthropic([]);
+  setSelectedKeys(new Set());
+  setDropdownAddedKeys(new Set());
+}
+```
+
+**CSS:**
+
+```css
+.provider-edit-form {
+  display: flex; flex-direction: column; gap: 6px;
+  padding: 10px 12px; background: #16213e;
+  border: 1px solid #e94560; border-radius: 6px;
+}
+.provider-edit-row { display: flex; gap: 8px; }
+.provider-edit-row .model-config-input { flex: 1; min-width: 0; padding: 6px 10px; font-size: 12px; }
+.provider-edit-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.btn-provider-edit {
+  background: none; border: 1px solid #0f3460; border-radius: 4px;
+  color: #888; cursor: pointer; font-size: 13px; padding: 2px 6px;
+  transition: all 0.2s; flex-shrink: 0;
+}
+.btn-provider-edit:hover { border-color: #e94560; color: #e94560; }
+```
+
 ### Variant: Multi-Entry-Point Page with Section Navigation (Legacy)
 
 > **Prefer splitting into independent pages** (see above) when sections have different purposes. This pattern is kept for reference when a single page with multiple sections is acceptable.
@@ -542,4 +722,136 @@ useEffect(() => {
 - [ ] `App.tsx`: Boolean state, conditional render inside `<main>`, pass callback to ToolDetail
 - [ ] `ToolDetail.tsx`: New optional prop, conditional button for specific tool
 - [ ] `App.css`: Page layout + trigger button styles using project theme tokens
+- [ ] `App.css`: Inline edit form styles (`.provider-edit-form`, `.provider-edit-row`, `.btn-provider-edit`) if list items are editable
 - [ ] Run `npm run lint` and `npm run build` to verify
+
+### Variant: Password Input with Toggle Button
+
+When a form contains sensitive fields (API keys, tokens), add a show/hide toggle button inside the input wrapper:
+
+**State:**
+
+```tsx
+const [showKey, setShowKey] = useState(false);
+// Reset on edit start:
+const handleEditStart = (item: Entity) => {
+  setShowKey(false);
+  // ... populate form ...
+};
+```
+
+**JSX** — wrap the input in `.password-input-wrapper`:
+
+```tsx
+<div className="password-input-wrapper">
+  <input
+    className="model-config-input"
+    type={showKey ? 'text' : 'password'}
+    placeholder="API Key"
+    value={editForm.api_key}
+    onChange={(e) => setEditForm((f) => ({ ...f, api_key: e.target.value }))}
+  />
+  <button
+    className="btn-toggle-password"
+    type="button"
+    onClick={() => setShowKey((v) => !v)}
+    title={showKey ? '隐藏密码' : '显示密码'}
+  >
+    {showKey ? '🙈' : '👁'}
+  </button>
+</div>
+```
+
+**CSS:**
+
+```css
+.password-input-wrapper {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+.password-input-wrapper .model-config-input {
+  width: 100%;
+  padding-right: 40px;   /* space for the toggle button */
+}
+.btn-toggle-password {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  padding: 2px 4px;
+  line-height: 1;
+  opacity: 0.6;
+  transition: opacity 0.2s;
+}
+.btn-toggle-password:hover { opacity: 1; }
+```
+
+### Variant: Section Title with Action Button
+
+When a section title needs a companion action (e.g., "open file", "refresh"), wrap them in a flex row:
+
+```tsx
+<div className="model-config-section-title-row">
+  <h3 className="model-config-section-title">Qwen Code settings.json 预览</h3>
+  <button className="btn-link-action" onClick={handleOpenFile} title="打开配置文件">
+    打开配置文件
+  </button>
+</div>
+```
+
+```css
+.model-config-section-title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.model-config-section-title-row .model-config-section-title {
+  margin: 0;
+}
+```
+
+### Variant: Opening External Files from Tauri
+
+To open a file with the system's default editor/viewer, add a Tauri command using platform-specific shell commands:
+
+```rust
+use std::process::Command;
+
+#[tauri::command]
+fn open_external_file(path: String) -> Result<(), String> {
+    let mut command = if cfg!(target_os = "windows") {
+        let mut c = Command::new("cmd");
+        c.args(["/C", "start", "", &path]);
+        c
+    } else if cfg!(target_os = "macos") {
+        let mut c = Command::new("open");
+        c.arg(&path);
+        c
+    } else {
+        let mut c = Command::new("xdg-open");
+        c.arg(&path);
+        c
+    };
+    command.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+```
+
+Frontend call:
+
+```tsx
+const handleOpenFile = async () => {
+  try {
+    await invoke('open_external_file', { path: settingsPath });
+  } catch (err) {
+    alert(`打开失败: ${err}`);
+  }
+};
+```
+
+For a known path (e.g., `~/.qwen/settings.json`), expose a dedicated command that constructs the path internally (using `config::get_tool_settings_path()`) so the frontend doesn't need to know the absolute path.

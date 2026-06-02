@@ -317,6 +317,30 @@ fn load_qwen_settings() -> Result<serde_json::Value, String> {
 }
 
 #[tauri::command]
+fn open_qwen_settings_file() -> Result<(), String> {
+    let path = config::get_qwen_settings_path();
+    if !path.exists() {
+        return Err(format!("配置文件不存在: {}", path.display()));
+    }
+    let path_str = path.to_string_lossy().to_string();
+    let mut command = if cfg!(target_os = "windows") {
+        let mut c = Command::new("cmd");
+        c.args(["/C", "start", "", &path_str]);
+        c
+    } else if cfg!(target_os = "macos") {
+        let mut c = Command::new("open");
+        c.arg(&path_str);
+        c
+    } else {
+        let mut c = Command::new("xdg-open");
+        c.arg(&path_str);
+        c
+    };
+    command.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
 fn register_providers_to_qwen(provider_ids: Vec<String>) -> Result<serde_json::Value, String> {
     let app_config = AppConfig::load();
     let selected: Vec<&Provider> = app_config
@@ -395,6 +419,7 @@ pub fn run() {
             create_provider,
             delete_provider,
             load_qwen_settings,
+            open_qwen_settings_file,
             register_providers_to_qwen,
             apply_qwen_model_config
         ])

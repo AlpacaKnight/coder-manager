@@ -12,6 +12,13 @@ const PROTOCOL_LABELS: Record<string, string> = {
   anthropic: 'Anthropic',
 };
 
+interface EditForm {
+  name: string;
+  id: string;
+  baseUrl: string;
+  envKey: string;
+}
+
 export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [existingOpenai, setExistingOpenai] = useState<QwenModel[]>([]);
@@ -22,6 +29,8 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
   const [currentSettings, setCurrentSettings] = useState<Record<string, unknown>>({});
   const [registering, setRegistering] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<EditForm>({ name: '', id: '', baseUrl: '', envKey: '' });
 
   const loadData = useCallback(async () => {
     try {
@@ -39,12 +48,17 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
       setExistingAnthropic(ant);
 
       const keys = new Set<string>();
-      for (const m of oai) keys.add(`existing:openai:${m.id}`);
-      for (const m of ant) keys.add(`existing:anthropic:${m.id}`);
+      for (let i = 0; i < oai.length; i++) keys.add(`existing:openai:${i}`);
+      for (let i = 0; i < ant.length; i++) keys.add(`existing:anthropic:${i}`);
       setSelectedKeys(keys);
       setDropdownAddedKeys(new Set());
     } catch (err) {
       console.error('Failed to load data:', err);
+      setCurrentSettings({});
+      setExistingOpenai([]);
+      setExistingAnthropic([]);
+      setSelectedKeys(new Set());
+      setDropdownAddedKeys(new Set());
     }
   }, []);
 
@@ -72,22 +86,26 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
   const modelList = useMemo((): ModelDisplay[] => {
     const result: ModelDisplay[] = [];
 
-    for (const m of existingOpenai) {
+    for (let i = 0; i < existingOpenai.length; i++) {
+      const m = existingOpenai[i];
       result.push({
-        key: `existing:openai:${m.id}`,
+        key: `existing:openai:${i}`,
         model_name: m.id,
         display_name: m.name,
         protocol: 'openai',
         source: 'existing',
+        index: i,
       });
     }
-    for (const m of existingAnthropic) {
+    for (let i = 0; i < existingAnthropic.length; i++) {
+      const m = existingAnthropic[i];
       result.push({
-        key: `existing:anthropic:${m.id}`,
+        key: `existing:anthropic:${i}`,
         model_name: m.id,
         display_name: m.name,
         protocol: 'anthropic',
         source: 'existing',
+        index: i,
       });
     }
 
@@ -119,9 +137,9 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
     for (const item of modelList) {
       if (!selectedKeys.has(item.key)) continue;
 
-      if (item.source === 'existing') {
+      if (item.source === 'existing' && item.index !== undefined) {
         const existingModels = item.protocol === 'openai' ? existingOpenai : existingAnthropic;
-        const found = existingModels.find((m) => m.id === item.model_name);
+        const found = existingModels[item.index];
         if (found) {
           if (item.protocol === 'openai') keepOpenai.push(found);
           else keepAnthropic.push(found);
@@ -207,6 +225,42 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
     });
   };
 
+  const handleEditStart = (item: ModelDisplay) => {
+    if (item.source !== 'existing' || item.index === undefined) return;
+    const existingModels = item.protocol === 'openai' ? existingOpenai : existingAnthropic;
+    const found = existingModels[item.index];
+    if (!found) return;
+    setEditingKey(item.key);
+    setEditForm({ name: found.name, id: found.id, baseUrl: found.baseUrl, envKey: found.envKey });
+  };
+
+  const handleEditCancel = () => {
+    setEditingKey(null);
+  };
+
+  const handleEditSave = (protocol: 'openai' | 'anthropic') => {
+    const idx = editingKey ? parseInt(editingKey.split(':').pop()!, 10) : -1;
+    if (idx < 0) return;
+
+    const updateModels = protocol === 'openai' ? setExistingOpenai : setExistingAnthropic;
+    updateModels((prev) =>
+      prev.map((m, i) => {
+        if (i !== idx) return m;
+        return { ...m, id: editForm.id, name: editForm.name, baseUrl: editForm.baseUrl, envKey: editForm.envKey };
+      }),
+    );
+
+    setEditingKey(null);
+  };
+
+  const handleOpenSettingsFile = async () => {
+    try {
+      await invoke('open_qwen_settings_file');
+    } catch (err) {
+      alert(`打开失败: ${err}`);
+    }
+  };
+
   const handleRegister = async () => {
     const keepOpenai: QwenModel[] = [];
     const keepAnthropic: QwenModel[] = [];
@@ -215,9 +269,9 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
     for (const item of modelList) {
       if (!selectedKeys.has(item.key)) continue;
 
-      if (item.source === 'existing') {
+      if (item.source === 'existing' && item.index !== undefined) {
         const existingModels = item.protocol === 'openai' ? existingOpenai : existingAnthropic;
-        const found = existingModels.find((m) => m.id === item.model_name);
+        const found = existingModels[item.index];
         if (found) {
           if (item.protocol === 'openai') keepOpenai.push(found);
           else keepAnthropic.push(found);
@@ -305,37 +359,100 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
               <p className="empty-message">暂无可用模型，请先通过上方下拉菜单添加或前往「添加 Provider」创建。</p>
             ) : (
               <div className="provider-select-list">
-                {modelList.map((item) => (
-                  <label key={item.key} className="provider-select-item">
-                    <input
-                      type="checkbox"
-                      checked={selectedKeys.has(item.key)}
-                      onChange={() => toggleSelect(item.key)}
-                    />
-                    <div className="provider-select-info">
-                      <span className="provider-select-name">{item.display_name}</span>
-                      <span className="provider-select-model">{item.model_name}</span>
-                    </div>
-                    <span className={`provider-protocol-tag protocol-${item.protocol}`}>
-                      {PROTOCOL_LABELS[item.protocol]}
-                    </span>
-                    {item.source === 'existing' && (
-                      <span className="provider-source-badge">已注册</span>
-                    )}
-                    {item.source === 'provider' && (
-                      <span className="provider-source-badge provider-source-new">新增</span>
-                    )}
-                  </label>
-                ))}
+                {modelList.map((item) => {
+                  if (editingKey === item.key && item.source === 'existing') {
+                    return (
+                      <div key={item.key} className="provider-edit-form">
+                        <div className="provider-edit-row">
+                          <input
+                            className="model-config-input"
+                            placeholder="显示名称"
+                            value={editForm.name}
+                            onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
+                          />
+                          <input
+                            className="model-config-input"
+                            placeholder="模型 ID"
+                            value={editForm.id}
+                            onChange={(e) => setEditForm((f) => ({ ...f, id: e.target.value }))}
+                          />
+                        </div>
+                        <div className="provider-edit-row">
+                          <input
+                            className="model-config-input"
+                            placeholder="Base URL"
+                            value={editForm.baseUrl}
+                            onChange={(e) => setEditForm((f) => ({ ...f, baseUrl: e.target.value }))}
+                          />
+                          <input
+                            className="model-config-input"
+                            placeholder="环境变量 Key"
+                            value={editForm.envKey}
+                            onChange={(e) => setEditForm((f) => ({ ...f, envKey: e.target.value }))}
+                          />
+                        </div>
+                        <div className="provider-edit-actions">
+                          <button className="btn-add-provider" onClick={() => handleEditSave(item.protocol)}>
+                            保存
+                          </button>
+                          <button className="btn-link-action" onClick={handleEditCancel}>
+                            取消
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <label key={item.key} className="provider-select-item">
+                      <input
+                        type="checkbox"
+                        checked={selectedKeys.has(item.key)}
+                        onChange={() => toggleSelect(item.key)}
+                      />
+                      <div className="provider-select-info">
+                        <span className="provider-select-name">{item.display_name}</span>
+                        <span className="provider-select-model">{item.model_name}</span>
+                      </div>
+                      <span className={`provider-protocol-tag protocol-${item.protocol}`}>
+                        {PROTOCOL_LABELS[item.protocol]}
+                      </span>
+                      {item.source === 'existing' && (
+                        <span className="provider-source-badge">已注册</span>
+                      )}
+                      {item.source === 'provider' && (
+                        <span className="provider-source-badge provider-source-new">新增</span>
+                      )}
+                      {item.source === 'existing' && !editingKey && (
+                        <button
+                          className="btn-provider-edit"
+                          onClick={(e) => { e.preventDefault(); handleEditStart(item); }}
+                          title="编辑"
+                        >
+                          ✎
+                        </button>
+                      )}
+                    </label>
+                  );
+                })}
               </div>
             )}
           </div>
         </div>
 
         <div className="model-config-right">
-          <h3 className="model-config-section-title">
-            Qwen Code settings.json 预览
-          </h3>
+          <div className="model-config-section-title-row">
+            <h3 className="model-config-section-title">
+              Qwen Code settings.json 预览
+            </h3>
+            <button
+              className="btn-link-action"
+              onClick={handleOpenSettingsFile}
+              title="用系统默认编辑器打开 settings.json"
+            >
+              打开配置文件
+            </button>
+          </div>
           <pre className="settings-preview">{preview}</pre>
         </div>
       </div>
