@@ -5,7 +5,7 @@ mod updater;
 mod version_check;
 
 use cli_tools::{CliTool, EnvCheck};
-use config::AppConfig;
+use config::{AppConfig, Provider, QwenModelEntry};
 use std::process::Command;
 
 const GITHUB_HOMEPAGE: &str = "https://github.com/AlpacaKnight/coder-manager";
@@ -281,6 +281,80 @@ fn save_tool_order(order: Vec<String>) -> Result<(), String> {
     config.save()
 }
 
+#[tauri::command]
+fn get_providers() -> Vec<Provider> {
+    let config = AppConfig::load();
+    config.providers
+}
+
+#[tauri::command]
+fn save_providers(providers: Vec<Provider>) -> Result<(), String> {
+    let mut config = AppConfig::load();
+    config.providers = providers;
+    config.save()
+}
+
+#[tauri::command]
+fn create_provider(provider: Provider) -> Result<(), String> {
+    let mut config = AppConfig::load();
+    if config.providers.iter().any(|p| p.id == provider.id) {
+        return Err(format!("Provider '{}' already exists", provider.id));
+    }
+    config.providers.push(provider);
+    config.save()
+}
+
+#[tauri::command]
+fn delete_provider(id: String) -> Result<(), String> {
+    let mut config = AppConfig::load();
+    config.providers.retain(|p| p.id != id);
+    config.save()
+}
+
+#[tauri::command]
+fn load_qwen_settings() -> Result<serde_json::Value, String> {
+    config::read_qwen_settings()
+}
+
+#[tauri::command]
+fn register_providers_to_qwen(provider_ids: Vec<String>) -> Result<serde_json::Value, String> {
+    let app_config = AppConfig::load();
+    let selected: Vec<&Provider> = app_config
+        .providers
+        .iter()
+        .filter(|p| provider_ids.contains(&p.id))
+        .collect();
+
+    if selected.is_empty() {
+        return Err("No valid providers selected".to_string());
+    }
+
+    let mut settings = config::read_qwen_settings()?;
+    config::merge_providers_to_settings(&mut settings, &selected.into_iter().cloned().collect::<Vec<_>>());
+    config::write_qwen_settings(&settings)?;
+    Ok(settings)
+}
+
+#[tauri::command]
+fn apply_qwen_model_config(
+    openai_models: Vec<QwenModelEntry>,
+    anthropic_models: Vec<QwenModelEntry>,
+    provider_ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let app_config = AppConfig::load();
+    let providers: Vec<Provider> = app_config
+        .providers
+        .iter()
+        .filter(|p| provider_ids.contains(&p.id))
+        .cloned()
+        .collect();
+
+    let mut settings = config::read_qwen_settings()?;
+    config::apply_qwen_model_config(&mut settings, &openai_models, &anthropic_models, &providers);
+    config::write_qwen_settings(&settings)?;
+    Ok(settings)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -315,7 +389,14 @@ pub fn run() {
             save_config,
             ignore_tool,
             unignore_tool,
-            save_tool_order
+            save_tool_order,
+            get_providers,
+            save_providers,
+            create_provider,
+            delete_provider,
+            load_qwen_settings,
+            register_providers_to_qwen,
+            apply_qwen_model_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

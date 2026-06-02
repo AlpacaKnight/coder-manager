@@ -5,6 +5,8 @@ import { ToolDetail } from './components/ToolDetail';
 import { Header } from './components/Header';
 import { StatusBar } from './components/StatusBar';
 import { Settings } from './pages/Settings';
+import { ModelConfig } from './pages/ModelConfig';
+import { ProviderManagement } from './pages/ProviderManagement';
 import { EnvDetail } from './components/EnvDetail';
 import type { CliTool, EnvCheck, AppConfig, ToolStatus } from './types';
 import './App.css';
@@ -27,9 +29,12 @@ function App() {
   const [tools, setTools] = useState<CliTool[]>([]);
   const [selectedTool, setSelectedTool] = useState<CliTool | null>(null);
   const [envCheck, setEnvCheck] = useState<EnvCheck | null>(null);
-  const [config, setConfig] = useState<AppConfig>({ ignored_tools: [], last_check_time: null, tool_order: [] });
+  const [config, setConfig] = useState<AppConfig>({ ignored_tools: [], last_check_time: null, tool_order: [], providers: [] });
   const configRef = useRef(config);
   const [showSettings, setShowSettings] = useState(false);
+  const [showModelConfig, setShowModelConfig] = useState(false);
+  const [showProviderMgmt, setShowProviderMgmt] = useState(false);
+  const [previousPage, setPreviousPage] = useState<'home' | 'model-config'>('home');
   const [isChecking, setIsChecking] = useState(false);
   const [updatingTools, setUpdatingTools] = useState<Record<string, boolean>>({});
   const [toolActions, setToolActions] = useState<Record<string, ToolAction>>({});
@@ -473,11 +478,12 @@ function App() {
 
   return (
     <div className="app">
-      <Header 
+      <Header
         onCheckUpdates={handleCheckUpdates}
         onUpdateAll={handleUpdateAll}
         onRefresh={handleRefresh}
         onOpenSettings={() => setShowSettings(true)}
+        onAddProvider={() => { setPreviousPage('home'); setShowProviderMgmt(true); }}
         isChecking={isChecking || isUpdating}
         updateableCount={updateableCount}
         envCheck={envCheck}
@@ -485,22 +491,39 @@ function App() {
       />
       
       <main className="app-main">
-        <ToolList
-          tools={tools}
-          selectedTool={selectedTool}
-          onSelectTool={setSelectedTool}
-          onReorder={handleReorder}
-          isChecking={isCheckingBackground}
-        />
-        <ToolDetail
-          tool={selectedTool}
-          onUpdate={handleUpdate}
-          onInstall={handleInstall}
-          onUninstall={handleUninstall}
-          onIgnore={handleIgnore}
-          isUpdating={selectedTool ? !!updatingTools[selectedTool.name] : false}
-          activeAction={selectedTool ? toolActions[selectedTool.name] ?? null : null}
-        />
+        {showProviderMgmt ? (
+          <ProviderManagement
+            onClose={() => {
+              setShowProviderMgmt(false);
+              if (previousPage === 'model-config') setShowModelConfig(true);
+            }}
+          />
+        ) : showModelConfig ? (
+          <ModelConfig
+            onClose={() => setShowModelConfig(false)}
+            onOpenProviderMgmt={() => { setPreviousPage('model-config'); setShowProviderMgmt(true); setShowModelConfig(false); }}
+          />
+        ) : (
+          <>
+            <ToolList
+              tools={tools}
+              selectedTool={selectedTool}
+              onSelectTool={setSelectedTool}
+              onReorder={handleReorder}
+              isChecking={isCheckingBackground}
+            />
+            <ToolDetail
+              tool={selectedTool}
+              onUpdate={handleUpdate}
+              onInstall={handleInstall}
+              onUninstall={handleUninstall}
+              onIgnore={handleIgnore}
+              onOpenModelConfig={() => { setPreviousPage('home'); setShowModelConfig(true); }}
+              isUpdating={selectedTool ? !!updatingTools[selectedTool.name] : false}
+              activeAction={selectedTool ? toolActions[selectedTool.name] ?? null : null}
+            />
+          </>
+        )}
       </main>
       
       <StatusBar 

@@ -5,6 +5,7 @@ interface HeaderProps {
   onUpdateAll: () => void;
   onRefresh: () => void;
   onOpenSettings: () => void;
+  onAddProvider: () => void;
   isChecking: boolean;
   updateableCount: number;
   envCheck: { 
@@ -22,7 +23,7 @@ interface HeaderProps {
 
 const GITHUB_HOMEPAGE = 'https://github.com/AlpacaKnight/coder-manager';
 
-export function Header({ onCheckUpdates, onUpdateAll, onRefresh, onOpenSettings, isChecking, updateableCount, envCheck, onEnvClick }: HeaderProps) {
+export function Header({ onCheckUpdates, onUpdateAll, onRefresh, onOpenSettings, onAddProvider, isChecking, updateableCount, envCheck, onEnvClick }: HeaderProps) {
   const handleOpenGithub = async () => {
     try {
       await invoke('open_github_homepage');
@@ -86,7 +87,7 @@ export function Header({ onCheckUpdates, onUpdateAll, onRefresh, onOpenSettings,
         </div>
       </div>
       <div className="header-actions">
-        <button 
+        <button
           className="btn-primary"
           onClick={onCheckUpdates}
           disabled={isChecking}
@@ -102,6 +103,9 @@ export function Header({ onCheckUpdates, onUpdateAll, onRefresh, onOpenSettings,
         </button>
         <button className="btn-secondary" onClick={onRefresh}>
           刷新
+        </button>
+        <button className="btn-secondary" onClick={onAddProvider}>
+          添加 Provider
         </button>
         <button className="btn-settings" onClick={onOpenSettings}>
           ⚙️

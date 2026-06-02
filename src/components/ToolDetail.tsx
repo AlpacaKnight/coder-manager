@@ -6,6 +6,7 @@ interface ToolDetailProps {
   onInstall?: (name: string) => void;
   onUninstall?: (name: string) => void;
   onIgnore: (name: string) => void;
+  onOpenModelConfig?: () => void;
   isUpdating: boolean;
   activeAction?: 'update' | 'install' | 'uninstall' | null;
 }
@@ -30,7 +31,7 @@ const statusClasses: Record<string, string> = {
   Checking: 'checking',
 };
 
-export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, isUpdating, activeAction }: ToolDetailProps) {
+export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, onOpenModelConfig, isUpdating, activeAction }: ToolDetailProps) {
   if (!tool) {
     return <div className="tool-detail empty">选择一个工具查看详情</div>;
   }
@@ -113,6 +114,15 @@ export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, i
             disabled={isBusy}
           >
             忽略
+          </button>
+        )}
+
+        {tool.name === 'qwen' && (
+          <button
+            className="btn-model-config"
+            onClick={() => onOpenModelConfig?.()}
+          >
+            配置模型
           </button>
         )}
 

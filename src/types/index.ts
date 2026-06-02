@@ -32,8 +32,37 @@ export interface EnvCheck {
   rustc_version: string | null;
 }
 
+export type ProviderType = 'openai' | 'openai-responses' | 'anthropic';
+
+export interface Provider {
+  id: string;
+  name: string;
+  api_base_url: string;
+  model_name: string;
+  api_key: string;
+  provider_type: ProviderType;
+}
+
 export interface AppConfig {
   ignored_tools: string[];
   last_check_time: string | null;
   tool_order: string[];
+  providers: Provider[];
+}
+
+export interface QwenModel {
+  id: string;
+  name: string;
+  baseUrl: string;
+  envKey: string;
+  providerType?: string;
+}
+
+export interface ModelDisplay {
+  key: string;
+  model_name: string;
+  display_name: string;
+  protocol: 'openai' | 'anthropic';
+  source: 'existing' | 'provider';
+  provider_id?: string;
 }
