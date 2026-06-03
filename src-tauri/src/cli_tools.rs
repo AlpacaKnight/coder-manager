@@ -68,7 +68,9 @@ impl CliToolsRegistry {
                 display_name: "Claude Code".to_string(),
                 version_command: "claude --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
-                latest_version_source: LatestVersionSource::Npm("@anthropic-ai/claude-code".to_string()),
+                latest_version_source: LatestVersionSource::Npm(
+                    "@anthropic-ai/claude-code".to_string(),
+                ),
                 can_auto_update: true,
                 update_command: "claude install".to_string(),
                 install_command: "npm install -g @anthropic-ai/claude-code".to_string(),
@@ -108,7 +110,9 @@ impl CliToolsRegistry {
                 display_name: "Kimi Code".to_string(),
                 version_command: "kimi --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
-                latest_version_source: LatestVersionSource::Npm("@moonshot-ai/kimi-code".to_string()),
+                latest_version_source: LatestVersionSource::Npm(
+                    "@moonshot-ai/kimi-code".to_string(),
+                ),
                 can_auto_update: true,
                 update_command: "npm install -g @moonshot-ai/kimi-code@latest".to_string(),
                 install_command: "npm install -g @moonshot-ai/kimi-code@latest".to_string(),
@@ -128,7 +132,9 @@ impl CliToolsRegistry {
                 display_name: "codebuddy-code".to_string(),
                 version_command: "codebuddy --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
-                latest_version_source: LatestVersionSource::Npm("@tencent-ai/codebuddy-code".to_string()),
+                latest_version_source: LatestVersionSource::Npm(
+                    "@tencent-ai/codebuddy-code".to_string(),
+                ),
                 can_auto_update: true,
                 update_command: "npm install -g @tencent-ai/codebuddy-code".to_string(),
                 install_command: "npm install -g @tencent-ai/codebuddy-code".to_string(),

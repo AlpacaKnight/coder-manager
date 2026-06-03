@@ -8,10 +8,11 @@ use std::time::{Duration, Instant};
 const VERSION_QUERY_TIMEOUT: Duration = Duration::from_secs(8);
 
 pub fn check_for_updates(tools: &mut [CliTool]) {
-    let version_sources: HashMap<String, LatestVersionSource> = CliToolsRegistry::get_supported_tools()
-        .into_iter()
-        .map(|tool| (tool.name, tool.latest_version_source))
-        .collect();
+    let version_sources: HashMap<String, LatestVersionSource> =
+        CliToolsRegistry::get_supported_tools()
+            .into_iter()
+            .map(|tool| (tool.name, tool.latest_version_source))
+            .collect();
 
     let mut tasks = Vec::new();
     for tool in tools.iter() {
@@ -51,12 +52,12 @@ pub fn check_for_updates(tools: &mut [CliTool]) {
             tool.status = ToolStatus::Ignored;
             continue;
         }
-        
+
         if tool.current_version.is_empty() {
             tool.status = ToolStatus::NotInstalled;
             continue;
         }
-        
+
         let Some(source) = version_sources.get(&tool.name) else {
             tool.status = ToolStatus::Error;
             continue;
@@ -110,7 +111,7 @@ fn get_npm_latest_version(package: &str) -> Result<String, String> {
         ],
         VERSION_QUERY_TIMEOUT,
     )?;
-    
+
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
     } else {
@@ -124,7 +125,7 @@ fn get_crates_latest_version(package: &str) -> Result<String, String> {
         &["search", package, "--limit", "1"],
         VERSION_QUERY_TIMEOUT,
     )?;
-    
+
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let regex = Regex::new(r#"version" = "([^"]+)""#).map_err(|e| e.to_string())?;
@@ -140,7 +141,7 @@ fn get_crates_latest_version(package: &str) -> Result<String, String> {
 
 fn get_rust_latest_version() -> Result<String, String> {
     let output = run_command_with_timeout("rustup", &["show"], VERSION_QUERY_TIMEOUT)?;
-    
+
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
         let regex = Regex::new(r"rustc (\d+\.\d+\.\d+)").map_err(|e| e.to_string())?;
@@ -177,7 +178,11 @@ fn run_command_with_timeout(
             Ok(None) if started.elapsed() >= timeout => {
                 let _ = child.kill();
                 let _ = child.wait_with_output();
-                return Err(format!("{} timed out after {}s", program, timeout.as_secs()));
+                return Err(format!(
+                    "{} timed out after {}s",
+                    program,
+                    timeout.as_secs()
+                ));
             }
             Ok(None) => thread::sleep(Duration::from_millis(50)),
             Err(e) => return Err(format!("Failed to wait for {}: {}", program, e)),

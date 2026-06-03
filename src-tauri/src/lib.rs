@@ -81,10 +81,15 @@ fn get_tool_names() -> Vec<CliTool> {
     // 仅返回工具定义（不检测系统），用于秒开界面
     let config = AppConfig::load();
     let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
-    let ignored: Vec<String> = config.ignored_tools.iter().map(|s| s.to_lowercase()).collect();
+    let ignored: Vec<String> = config
+        .ignored_tools
+        .iter()
+        .map(|s| s.to_lowercase())
+        .collect();
 
-    let tools: Vec<CliTool> = definitions.into_iter().map(|def| {
-        CliTool {
+    let tools: Vec<CliTool> = definitions
+        .into_iter()
+        .map(|def| CliTool {
             name: def.name.clone(),
             display_name: def.display_name,
             current_version: String::new(),
@@ -100,8 +105,8 @@ fn get_tool_names() -> Vec<CliTool> {
             },
             ignored: ignored.contains(&def.name.to_lowercase()),
             status: cli_tools::ToolStatus::Checking,
-        }
-    }).collect();
+        })
+        .collect();
 
     // 排序
     let mut tools = tools;
@@ -152,11 +157,9 @@ fn sort_tools_by_config(tools: &mut Vec<CliTool>, tool_order: &[String]) {
 
 #[tauri::command]
 async fn update_single_tool(tool: CliTool) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        updater::update_tool(&tool)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || updater::update_tool(&tool))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -185,7 +188,10 @@ async fn install_tool(name: String) -> Result<String, String> {
         if let Some(def) = def {
             updater::install_tool(&def)
         } else {
-            Err(format!("Tool '{}' not found or cannot be auto-installed", name))
+            Err(format!(
+                "Tool '{}' not found or cannot be auto-installed",
+                name
+            ))
         }
     })
     .await
@@ -210,11 +216,9 @@ async fn uninstall_tool(name: String) -> Result<String, String> {
 
 #[tauri::command]
 async fn update_all_tools(tools: Vec<CliTool>) -> Vec<(String, Result<String, String>)> {
-    tauri::async_runtime::spawn_blocking(move || {
-        updater::batch_update_tools(tools)
-    })
-    .await
-    .unwrap_or_else(|_| vec![])
+    tauri::async_runtime::spawn_blocking(move || updater::batch_update_tools(tools))
+        .await
+        .unwrap_or_else(|_| vec![])
 }
 
 #[tauri::command]
@@ -222,7 +226,10 @@ async fn batch_update_tools(names: Vec<String>) -> Vec<(String, Result<String, S
     tauri::async_runtime::spawn_blocking(move || {
         let config = AppConfig::load();
         let tools = detection::detect_installed_tools(&config.ignored_tools);
-        let selected_tools = tools.into_iter().filter(|t| names.contains(&t.name)).collect();
+        let selected_tools = tools
+            .into_iter()
+            .filter(|t| names.contains(&t.name))
+            .collect();
         updater::batch_update_tools(selected_tools)
     })
     .await
@@ -354,7 +361,10 @@ fn register_providers_to_qwen(provider_ids: Vec<String>) -> Result<serde_json::V
     }
 
     let mut settings = config::read_qwen_settings()?;
-    config::merge_providers_to_settings(&mut settings, &selected.into_iter().cloned().collect::<Vec<_>>());
+    config::merge_providers_to_settings(
+        &mut settings,
+        &selected.into_iter().cloned().collect::<Vec<_>>(),
+    );
     config::write_qwen_settings(&settings)?;
     Ok(settings)
 }

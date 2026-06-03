@@ -93,10 +93,7 @@ pub fn write_qwen_settings(settings: &serde_json::Value) -> Result<(), String> {
     fs::write(&path, json).map_err(|e| e.to_string())
 }
 
-pub fn merge_providers_to_settings(
-    settings: &mut serde_json::Value,
-    providers: &[Provider],
-) {
+pub fn merge_providers_to_settings(settings: &mut serde_json::Value, providers: &[Provider]) {
     if !settings.is_object() {
         *settings = serde_json::json!({});
     }
@@ -128,7 +125,10 @@ pub fn merge_providers_to_settings(
     if let Some(mp_obj) = model_providers.as_object_mut() {
         mp_obj.insert("openai".to_string(), serde_json::json!(openai_providers));
         if !anthropic_providers.is_empty() {
-            mp_obj.insert("anthropic".to_string(), serde_json::json!(anthropic_providers));
+            mp_obj.insert(
+                "anthropic".to_string(),
+                serde_json::json!(anthropic_providers),
+            );
         }
     }
 
@@ -148,9 +148,7 @@ pub fn merge_providers_to_settings(
     }
 
     // Merge env keys
-    let env = obj
-        .entry("env")
-        .or_insert_with(|| serde_json::json!({}));
+    let env = obj.entry("env").or_insert_with(|| serde_json::json!({}));
     if let Some(env_obj) = env.as_object_mut() {
         for provider in providers {
             let env_key = format!("{}_API_KEY", provider.id.to_uppercase());
@@ -159,14 +157,9 @@ pub fn merge_providers_to_settings(
     }
 
     // Set model.name to first provider if not already set to a valid one
-    let model = obj
-        .entry("model")
-        .or_insert_with(|| serde_json::json!({}));
+    let model = obj.entry("model").or_insert_with(|| serde_json::json!({}));
     if let Some(model_obj) = model.as_object_mut() {
-        let current_name = model_obj
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let current_name = model_obj.get("name").and_then(|v| v.as_str()).unwrap_or("");
         let valid_ids: Vec<&str> = providers.iter().map(|p| p.model_name.as_str()).collect();
         if current_name.is_empty() || !valid_ids.contains(&current_name) {
             if let Some(first) = providers.first() {
@@ -200,7 +193,10 @@ pub fn apply_qwen_model_config(
                 "envKey": m.env_key
             });
             if let Some(ref pt) = m.provider_type {
-                entry.as_object_mut().unwrap().insert("providerType".to_string(), serde_json::json!(pt));
+                entry
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("providerType".to_string(), serde_json::json!(pt));
             }
             entry
         })
@@ -216,7 +212,10 @@ pub fn apply_qwen_model_config(
                 "envKey": m.env_key
             });
             if let Some(ref pt) = m.provider_type {
-                entry.as_object_mut().unwrap().insert("providerType".to_string(), serde_json::json!(pt));
+                entry
+                    .as_object_mut()
+                    .unwrap()
+                    .insert("providerType".to_string(), serde_json::json!(pt));
             }
             entry
         })
@@ -260,9 +259,7 @@ pub fn apply_qwen_model_config(
     }
 
     // env — 保留已有的 + 新增 provider 的 key
-    let env = obj
-        .entry("env")
-        .or_insert_with(|| serde_json::json!({}));
+    let env = obj.entry("env").or_insert_with(|| serde_json::json!({}));
     if let Some(env_obj) = env.as_object_mut() {
         for p in providers {
             let env_key = format!("{}_API_KEY", p.id.to_uppercase());
@@ -271,14 +268,9 @@ pub fn apply_qwen_model_config(
     }
 
     // model.name — 当前活跃模型
-    let model = obj
-        .entry("model")
-        .or_insert_with(|| serde_json::json!({}));
+    let model = obj.entry("model").or_insert_with(|| serde_json::json!({}));
     if let Some(model_obj) = model.as_object_mut() {
-        let current_name = model_obj
-            .get("name")
-            .and_then(|v| v.as_str())
-            .unwrap_or("");
+        let current_name = model_obj.get("name").and_then(|v| v.as_str()).unwrap_or("");
         let all_model_ids: Vec<&str> = all_openai
             .iter()
             .chain(all_anthropic.iter())

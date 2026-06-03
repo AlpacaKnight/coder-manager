@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Coder Manager",
+  "productName": "CoderManager",
   "version": "0.1.0",
   "identifier": "com.coder-manager.app",
   "build": {
