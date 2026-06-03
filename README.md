@@ -30,6 +30,7 @@
 - Gemini CLI
 - OpenCode
 - QwenCode
+- Kimi Code
 - deepcode-cli
 - codebuddy-code
 - kilo-cli
