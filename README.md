@@ -36,6 +36,7 @@
 - kilo-cli
 - 百炼 CLI
 - Reasonix
+- MiMo Code
 
 具体的工具注册清单和可升级指令，可在 [src-tauri/src/cli_tools.rs](src-tauri/src/cli_tools.rs) 中获取与扩展。
 

@@ -81,13 +81,14 @@ pub fn detect_installed_tools(ignored_list: &[String]) -> Vec<CliTool> {
 fn detect_tool(definition: &CliToolDefinition, ignored: &[String]) -> CliTool {
     let is_ignored = ignored.contains(&definition.name.to_lowercase());
 
-    // 第一步：检查命令是否存在
-    let is_installed = check_command_exists(&definition.name);
+    // 第一步：检查命令是否存在（优先使用 command_name，否则使用 name）
+    let check_name = definition.command_name.as_deref().unwrap_or(&definition.name);
+    let is_installed = check_command_exists(check_name);
 
     if is_installed {
         // 命令存在，尝试获取版本和路径
         let version = get_tool_version(definition).unwrap_or_else(|| String::from("未知"));
-        let path = find_tool_path(&definition.name);
+        let path = find_tool_path(check_name);
 
         CliTool {
             name: definition.name.clone(),

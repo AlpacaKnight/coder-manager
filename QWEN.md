@@ -5,7 +5,7 @@
 Coder Manager 是一个桌面应用程序，用于管理和更新开发相关的 CLI 工具。采用 **Tauri 2.x** 框架构建，前端使用 **React 19 + TypeScript**，后端使用 **Rust**。
 
 ### 核心功能
-- 自动检测系统已安装的 CLI 工具（Node.js、Rust、Git、Docker、OpenAI Codex、Claude Code、Gemini CLI、Qwen Code 等 14 种工具）
+- 自动检测系统已安装的 CLI 工具（Node.js、Rust、Git、Docker、OpenAI Codex、Claude Code、Gemini CLI、Qwen Code、MiMo Code 等 15 种工具）
 - 检查工具更新
 - 支持单个/批量更新工具
 - 忽略特定工具的更新提醒

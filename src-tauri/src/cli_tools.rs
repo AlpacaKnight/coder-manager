@@ -46,6 +46,7 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "abtop".to_string(),
                 display_name: "abtop".to_string(),
+                command_name: None,
                 version_command: "abtop --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::CratesIo("abtop".to_string()),
@@ -56,6 +57,7 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "codex".to_string(),
                 display_name: "OpenAI Codex".to_string(),
+                command_name: None,
                 version_command: "codex --version".to_string(),
                 version_regex: r"codex-cli (\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm("@openai/codex".to_string()),
@@ -66,6 +68,7 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "claude".to_string(),
                 display_name: "Claude Code".to_string(),
+                command_name: None,
                 version_command: "claude --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm(
@@ -78,6 +81,7 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "gemini".to_string(),
                 display_name: "Gemini CLI".to_string(),
+                command_name: None,
                 version_command: "gemini --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm("@google/gemini-cli".to_string()),
@@ -88,6 +92,7 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "opencode".to_string(),
                 display_name: "OpenCode".to_string(),
+                command_name: None,
                 version_command: "opencode -v".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm("opencode-ai".to_string()),
@@ -98,6 +103,7 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "qwen".to_string(),
                 display_name: "QwenCode".to_string(),
+                command_name: None,
                 version_command: "qwen -v".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm("@qwen-code/qwen-code".to_string()),
@@ -108,6 +114,7 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "kimi".to_string(),
                 display_name: "Kimi Code".to_string(),
+                command_name: None,
                 version_command: "kimi --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm(
@@ -120,6 +127,7 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "deepcode".to_string(),
                 display_name: "deepcode-cli".to_string(),
+                command_name: None,
                 version_command: "deepcode --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm("@vegamo/deepcode-cli".to_string()),
@@ -130,6 +138,7 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "codebuddy".to_string(),
                 display_name: "codebuddy-code".to_string(),
+                command_name: None,
                 version_command: "codebuddy --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm(
@@ -142,6 +151,7 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "kilo".to_string(),
                 display_name: "kilo-cli".to_string(),
+                command_name: None,
                 version_command: "kilo --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm("@kilocode/cli".to_string()),
@@ -152,6 +162,7 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "bailian".to_string(),
                 display_name: "百炼 CLI".to_string(),
+                command_name: None,
                 version_command: "bailian --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm("bailian-cli".to_string()),
@@ -162,12 +173,24 @@ impl CliToolsRegistry {
             CliToolDefinition {
                 name: "reasonix".to_string(),
                 display_name: "Reasonix".to_string(),
+                command_name: None,
                 version_command: "reasonix --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm("reasonix".to_string()),
                 can_auto_update: true,
                 update_command: "npm install -g reasonix".to_string(),
                 install_command: "npm install -g reasonix".to_string(),
+            },
+            CliToolDefinition {
+                name: "mimocode".to_string(),
+                display_name: "MiMo Code".to_string(),
+                command_name: Some("mimo".to_string()),
+                version_command: "mimo --version".to_string(),
+                version_regex: r"(\d+\.\d+\.\d+)".to_string(),
+                latest_version_source: LatestVersionSource::Npm("@mimo-ai/cli".to_string()),
+                can_auto_update: true,
+                update_command: "npm install -g @mimo-ai/cli".to_string(),
+                install_command: "npm install -g @mimo-ai/cli".to_string(),
             },
         ]
     }
@@ -177,6 +200,7 @@ impl CliToolsRegistry {
 pub struct CliToolDefinition {
     pub name: String,
     pub display_name: String,
+    pub command_name: Option<String>,
     pub version_command: String,
     pub version_regex: String,
     pub latest_version_source: LatestVersionSource,
