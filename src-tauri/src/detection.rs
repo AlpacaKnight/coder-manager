@@ -1,4 +1,5 @@
 use super::cli_tools::{CliTool, CliToolDefinition, CliToolsRegistry, EnvCheck, ToolStatus};
+use rayon::prelude::*;
 use regex::Regex;
 use std::collections::HashSet;
 use std::env;
@@ -73,7 +74,7 @@ pub fn detect_installed_tools(ignored_list: &[String]) -> Vec<CliTool> {
     let ignored: Vec<String> = ignored_list.iter().map(|s| s.to_lowercase()).collect();
 
     definitions
-        .into_iter()
+        .into_par_iter()
         .map(|def| detect_tool(&def, &ignored))
         .collect()
 }
