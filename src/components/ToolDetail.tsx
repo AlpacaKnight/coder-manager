@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+import { invoke } from '@tauri-apps/api/core';
 import type { CliTool } from '../types';
 
 interface ToolDetailProps {
@@ -32,6 +34,16 @@ const statusClasses: Record<string, string> = {
 };
 
 export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, onOpenModelConfig, isUpdating, activeAction }: ToolDetailProps) {
+  const [updateCommand, setUpdateCommand] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (tool?.name) {
+      invoke<string | null>('get_tool_update_command', { name: tool.name })
+        .then(setUpdateCommand)
+        .catch(() => setUpdateCommand(null));
+    }
+  }, [tool?.name]);
+
   if (!tool) {
     return <div className="tool-detail empty">选择一个工具查看详情</div>;
   }
@@ -86,11 +98,11 @@ export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, o
           </button>
         )}
 
-        {isInstalled && tool.update_command && (
+        {isInstalled && updateCommand && (
           <button
             className="btn-install-manual"
             onClick={() => {
-              alert(`更新命令: ${tool.update_command}`);
+              alert(`更新命令: ${updateCommand}`);
             }}
           >
             查看更新命令

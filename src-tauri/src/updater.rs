@@ -1,81 +1,76 @@
 use super::cli_tools::{CliTool, CliToolDefinition, LatestVersionSource};
+use crate::cli_tools::CliToolsRegistry;
 use std::process::Command;
 
-pub fn update_tool(tool: &CliTool) -> Result<String, String> {
-    let update_cmd = tool
-        .update_command
-        .as_ref()
-        .and_then(|c| if c.is_empty() { None } else { Some(c) })
-        .ok_or_else(|| "This tool cannot be auto-updated".to_string())?;
-
-    let (program, args) = split_command(update_cmd);
-
-    let mut command = if cfg!(target_os = "windows") {
-        let mut cmd = Command::new("cmd");
-        cmd.arg("/c");
-        cmd.arg(update_cmd);
-        cmd
-    } else {
-        let mut cmd = Command::new(program);
-        cmd.args(&args);
-        cmd
-    };
-
-    let output = command
-        .output()
-        .map_err(|e| format!("Failed to execute update: {}", e))?;
-
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    } else {
-        Err(String::from_utf8_lossy(&output.stderr).to_string())
-    }
-}
-
-pub fn install_tool(tool: &CliToolDefinition) -> Result<String, String> {
-    let install_cmd = &tool.install_command;
-
+fn execute_command(cmd: &str, tool_name: &str, operation: &str) -> Result<String, String> {
     let output = if cfg!(target_os = "windows") {
-        Command::new("cmd").arg("/c").arg(install_cmd).output()
+        Command::new("cmd").arg("/c").arg(cmd).output()
     } else {
-        let (program, args) = split_command(install_cmd);
-        Command::new(program).args(&args).output()
+        // 对于包含特殊字符（管道、重定向等）的命令，需要通过 shell 执行
+        if cmd.contains('|') || cmd.contains('>') || cmd.contains('<') || cmd.contains(';') || cmd.contains('&') {
+            Command::new("bash").arg("-c").arg(cmd).output()
+        } else {
+            let (program, args) = split_command(cmd);
+            Command::new(program).args(&args).output()
+        }
     }
-    .map_err(|e| format!("Failed to execute install: {}", e))?;
+    .map_err(|e| format!("Failed to execute {}: {}", operation, e))?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).to_string();
         if stderr.is_empty() {
-            Err(format!("Installation failed for '{}'", tool.name))
+            Err(format!("{} failed for '{}'", operation, tool_name))
         } else {
             Err(stderr)
         }
     }
+}
+
+pub fn update_tool_by_definition(tool: &CliToolDefinition) -> Result<String, String> {
+    let update_cmd = get_update_command(tool)?;
+    execute_command(&update_cmd, &tool.name, "Update")
+}
+
+fn get_update_command(tool: &CliToolDefinition) -> Result<String, String> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(cmd) = &tool.update_command_unix {
+            return Ok(cmd.clone());
+        }
+    }
+    Ok(tool.update_command.clone())
+}
+
+pub fn install_tool(tool: &CliToolDefinition) -> Result<String, String> {
+    let install_cmd = get_install_command(tool)?;
+    execute_command(&install_cmd, &tool.name, "Installation")
+}
+
+fn get_install_command(tool: &CliToolDefinition) -> Result<String, String> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(cmd) = &tool.install_command_unix {
+            return Ok(cmd.clone());
+        }
+    }
+    Ok(tool.install_command.clone())
+}
+
+pub fn get_update_command_for_display(tool: &CliToolDefinition) -> String {
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(cmd) = &tool.update_command_unix {
+            return cmd.clone();
+        }
+    }
+    tool.update_command.clone()
 }
 
 pub fn uninstall_tool(tool: &CliToolDefinition) -> Result<String, String> {
     let uninstall_cmd = get_uninstall_command(tool)?;
-
-    let output = if cfg!(target_os = "windows") {
-        Command::new("cmd").arg("/c").arg(&uninstall_cmd).output()
-    } else {
-        let (program, args) = split_command(&uninstall_cmd);
-        Command::new(program).args(&args).output()
-    }
-    .map_err(|e| format!("Failed to execute uninstall: {}", e))?;
-
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
-        if stderr.is_empty() {
-            Err(format!("Uninstall failed for '{}'", tool.name))
-        } else {
-            Err(stderr)
-        }
-    }
+    execute_command(&uninstall_cmd, &tool.name, "Uninstall")
 }
 
 fn get_uninstall_command(tool: &CliToolDefinition) -> Result<String, String> {
@@ -98,10 +93,20 @@ pub fn batch_update_tools(tools: Vec<CliTool>) -> Vec<(String, Result<String, St
                     .unwrap_or(true)
         })
         .map(|tool| {
-            let result = update_tool(&tool);
+            let result = update_tool_by_name(&tool.name);
             (tool.name, result)
         })
         .collect()
+}
+
+fn update_tool_by_name(name: &str) -> Result<String, String> {
+    let definitions = CliToolsRegistry::get_supported_tools();
+    let def = definitions.into_iter().find(|d| d.name == name);
+    if let Some(def) = def {
+        update_tool_by_definition(&def)
+    } else {
+        Err(format!("Tool '{}' not found", name))
+    }
 }
 
 fn split_command(cmd: &str) -> (&str, Vec<&str>) {

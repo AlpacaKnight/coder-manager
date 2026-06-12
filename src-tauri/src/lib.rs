@@ -157,20 +157,27 @@ fn sort_tools_by_config(tools: &mut Vec<CliTool>, tool_order: &[String]) {
 
 #[tauri::command]
 async fn update_single_tool(tool: CliTool) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || updater::update_tool(&tool))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
+        let def = definitions.into_iter().find(|d| d.name == tool.name);
+        if let Some(def) = def {
+            updater::update_tool_by_definition(&def)
+        } else {
+            Err(format!("Tool '{}' not found", tool.name))
+        }
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
 async fn update_tool(name: String) -> Result<String, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let config = AppConfig::load();
-        let tools = detection::detect_installed_tools(&config.ignored_tools);
-        let tool = tools.into_iter().find(|t| t.name == name);
+        let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
+        let def = definitions.into_iter().find(|d| d.name == name);
 
-        if let Some(tool) = tool {
-            updater::update_tool(&tool)
+        if let Some(def) = def {
+            updater::update_tool_by_definition(&def)
         } else {
             Err(format!("Tool '{}' not found", name))
         }
@@ -224,13 +231,19 @@ async fn update_all_tools(tools: Vec<CliTool>) -> Vec<(String, Result<String, St
 #[tauri::command]
 async fn batch_update_tools(names: Vec<String>) -> Vec<(String, Result<String, String>)> {
     tauri::async_runtime::spawn_blocking(move || {
-        let config = AppConfig::load();
-        let tools = detection::detect_installed_tools(&config.ignored_tools);
-        let selected_tools = tools
-            .into_iter()
-            .filter(|t| names.contains(&t.name))
+        let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
+        let selected: Vec<&cli_tools::CliToolDefinition> = definitions
+            .iter()
+            .filter(|d| names.contains(&d.name))
             .collect();
-        updater::batch_update_tools(selected_tools)
+
+        selected
+            .into_iter()
+            .map(|def| {
+                let result = updater::update_tool_by_definition(def);
+                (def.name.clone(), result)
+            })
+            .collect()
     })
     .await
     .unwrap_or_else(|_| vec![])
@@ -255,6 +268,18 @@ async fn get_tool_latest_version(name: String) -> Result<Option<String>, String>
     })
     .await
     .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn get_tool_update_command(name: String) -> Result<Option<String>, String> {
+    let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
+    let def = definitions.into_iter().find(|d| d.name == name);
+    if let Some(def) = def {
+        let cmd = updater::get_update_command_for_display(&def);
+        Ok(Some(cmd))
+    } else {
+        Err(format!("Tool '{}' not found", name))
+    }
 }
 
 #[tauri::command]
@@ -410,6 +435,7 @@ pub fn run() {
             get_tools_quick,
             get_tool_names,
             get_tool_latest_version,
+            get_tool_update_command,
             open_github_homepage,
             refresh_tools,
             check_for_updates,

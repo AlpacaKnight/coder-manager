@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useDragReorder } from '../hooks/useDragReorder';
 import type { CliTool } from '../types';
 
 interface ToolListProps {
@@ -20,72 +20,22 @@ const statusIcons: Record<string, string> = {
 };
 
 export function ToolList({ tools, selectedTool, onSelectTool, onReorder, isChecking }: ToolListProps) {
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
-  const hasMoved = useRef(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const {
+    dragIndex,
+    dragOverIndex,
+    containerRef,
+    handlePointerDown,
+    handleContainerClick,
+  } = useDragReorder({
+    items: tools,
+    onReorder: (reordered) => onReorder?.(reordered.map(t => t.name)),
+  });
 
-  useEffect(() => {
-    if (dragIndex === null || dragStartPos.current === null) return;
-    const startPos = dragStartPos.current;
-
-    const onPointerMove = (e: PointerEvent) => {
-      const dx = e.clientX - startPos.x;
-      const dy = e.clientY - startPos.y;
-      if (!hasMoved.current && Math.sqrt(dx * dx + dy * dy) > 5) {
-        hasMoved.current = true;
-      }
-      if (hasMoved.current) {
-        const els = document.elementsFromPoint(e.clientX, e.clientY);
-        const toolItem = els.find(el => el.classList?.contains('tool-item'));
-        if (toolItem && containerRef.current) {
-          const children = containerRef.current.children;
-          for (let i = 0; i < children.length; i++) {
-            if (children[i] === toolItem) {
-              setDragOverIndex(i);
-              return;
-            }
-          }
-        }
-      }
-    };
-
-    const onPointerUp = () => {
-      if (hasMoved.current && dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex && onReorder) {
-        const reordered = [...tools];
-        const [moved] = reordered.splice(dragIndex, 1);
-        reordered.splice(dragOverIndex, 0, moved);
-        onReorder(reordered.map(t => t.name));
-      }
-      setDragIndex(null);
-      setDragOverIndex(null);
-      dragStartPos.current = null;
-      hasMoved.current = false;
-      document.removeEventListener('pointermove', onPointerMove);
-      document.removeEventListener('pointerup', onPointerUp);
-    };
-
-    document.addEventListener('pointermove', onPointerMove);
-    document.addEventListener('pointerup', onPointerUp);
-    return () => {
-      document.removeEventListener('pointermove', onPointerMove);
-      document.removeEventListener('pointerup', onPointerUp);
-    };
-  }, [dragIndex, tools, dragOverIndex, onReorder]);
-
-  const handlePointerDown = useCallback((e: React.PointerEvent, index: number) => {
-    e.preventDefault();
-    dragStartPos.current = { x: e.clientX, y: e.clientY };
-    hasMoved.current = false;
-    setDragIndex(index);
-  }, []);
-
-  const handleClick = useCallback((tool: CliTool) => {
-    if (!hasMoved.current) {
+  const handleClick = (tool: CliTool) => {
+    if (!handleContainerClick()) {
       onSelectTool(tool);
     }
-  }, [onSelectTool]);
+  };
 
   return (
     <div className="tool-list">
@@ -98,7 +48,7 @@ export function ToolList({ tools, selectedTool, onSelectTool, onReorder, isCheck
           <div
             key={tool.name}
             data-index={index}
-            className={`tool-item ${
+            className={`tool-item drag-item ${
               selectedTool?.name === tool.name ? 'selected' : ''
             } ${
               dragIndex === index ? 'dragging' : ''

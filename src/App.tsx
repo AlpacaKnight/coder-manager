@@ -147,6 +147,16 @@ function App() {
     }
   }, []);
 
+  // 批量并发检查版本
+  const batchCheckUpdates = useCallback(async (toolsToCheck: CliTool[]) => {
+    for (let i = 0; i < toolsToCheck.length; i += VERSION_CHECK_CONCURRENCY) {
+      const batch = toolsToCheck.slice(i, i + VERSION_CHECK_CONCURRENCY);
+      await Promise.all(
+        batch.map((tool) => checkSingleToolUpdate(tool.name, tool.current_version)),
+      );
+    }
+  }, [checkSingleToolUpdate]);
+
   // 触发所有已安装工具的网络最新版本查询（纯异步并发）
   const triggerNetworkChecks = useCallback(async (currentTools: CliTool[]) => {
     setIsCheckingBackground(true);
@@ -161,17 +171,12 @@ function App() {
     );
 
     try {
-      for (let i = 0; i < toolsToCheck.length; i += VERSION_CHECK_CONCURRENCY) {
-        const batch = toolsToCheck.slice(i, i + VERSION_CHECK_CONCURRENCY);
-        await Promise.all(
-          batch.map((tool) => checkSingleToolUpdate(tool.name, tool.current_version)),
-        );
-      }
+      await batchCheckUpdates(toolsToCheck);
       await persistLastCheckTime();
     } finally {
       setIsCheckingBackground(false);
     }
-  }, [checkSingleToolUpdate, persistLastCheckTime]);
+  }, [batchCheckUpdates, persistLastCheckTime]);
 
   const reloadToolsFromLocal = useCallback(async (selectedName: string | null = null) => {
     const toolsData = await invoke<CliTool[]>('get_tools_quick');
@@ -227,25 +232,8 @@ function App() {
   const handleCheckUpdates = async () => {
     setIsChecking(true);
     try {
-      // 1. 先展示 Checking 在前端
-      setTools((prevTools) =>
-        prevTools.map((t) => {
-          if (!t.ignored && t.current_version) {
-            return { ...t, status: 'Checking' };
-          }
-          return t;
-        })
-      );
-
-      // 2. 小批量并发针对各工具发送后台各自的 API 请求
       const toolsToCheck = tools.filter((tool) => !tool.ignored && tool.current_version);
-      for (let i = 0; i < toolsToCheck.length; i += VERSION_CHECK_CONCURRENCY) {
-        const batch = toolsToCheck.slice(i, i + VERSION_CHECK_CONCURRENCY);
-        await Promise.all(
-          batch.map((tool) => checkSingleToolUpdate(tool.name, tool.current_version)),
-        );
-      }
-
+      await batchCheckUpdates(toolsToCheck);
       await persistLastCheckTime();
     } catch (error) {
       console.error('Failed to check updates:', error);

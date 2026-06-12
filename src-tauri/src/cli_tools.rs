@@ -53,6 +53,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "cargo install abtop".to_string(),
                 install_command: "cargo install abtop".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
             CliToolDefinition {
                 name: "codex".to_string(),
@@ -64,6 +68,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g @openai/codex".to_string(),
                 install_command: "npm install -g @openai/codex".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
             CliToolDefinition {
                 name: "claude".to_string(),
@@ -77,6 +85,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "claude install".to_string(),
                 install_command: "npm install -g @anthropic-ai/claude-code".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
             CliToolDefinition {
                 name: "gemini".to_string(),
@@ -88,6 +100,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g @google/gemini-cli".to_string(),
                 install_command: "npm install -g @google/gemini-cli".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
             CliToolDefinition {
                 name: "opencode".to_string(),
@@ -99,6 +115,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g opencode-ai".to_string(),
                 install_command: "npm install -g opencode-ai".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
             CliToolDefinition {
                 name: "qwen".to_string(),
@@ -110,6 +130,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g @qwen-code/qwen-code@latest".to_string(),
                 install_command: "npm install -g @qwen-code/qwen-code@latest".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
             CliToolDefinition {
                 name: "kimi".to_string(),
@@ -123,6 +147,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g @moonshot-ai/kimi-code@latest".to_string(),
                 install_command: "npm install -g @moonshot-ai/kimi-code@latest".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: Some("curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash".to_string()),
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: Some("curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash".to_string()),
             },
             CliToolDefinition {
                 name: "deepcode".to_string(),
@@ -134,6 +162,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g @vegamo/deepcode-cli".to_string(),
                 install_command: "npm install -g @vegamo/deepcode-cli".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
             CliToolDefinition {
                 name: "codebuddy".to_string(),
@@ -147,6 +179,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g @tencent-ai/codebuddy-code".to_string(),
                 install_command: "npm install -g @tencent-ai/codebuddy-code".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
             CliToolDefinition {
                 name: "kilo".to_string(),
@@ -158,6 +194,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g @kilocode/cli".to_string(),
                 install_command: "npm install -g @kilocode/cli".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
             CliToolDefinition {
                 name: "bailian".to_string(),
@@ -169,6 +209,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g bailian-cli".to_string(),
                 install_command: "npm install -g bailian-cli".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
             CliToolDefinition {
                 name: "reasonix".to_string(),
@@ -180,6 +224,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g reasonix".to_string(),
                 install_command: "npm install -g reasonix".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
             CliToolDefinition {
                 name: "mimocode".to_string(),
@@ -191,6 +239,10 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g @mimo-ai/cli".to_string(),
                 install_command: "npm install -g @mimo-ai/cli".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
             },
         ]
     }
@@ -207,6 +259,10 @@ pub struct CliToolDefinition {
     pub can_auto_update: bool,
     pub update_command: String,
     pub install_command: String,
+    #[cfg(not(target_os = "windows"))]
+    pub install_command_unix: Option<String>,
+    #[cfg(not(target_os = "windows"))]
+    pub update_command_unix: Option<String>,
 }
 
 #[derive(Debug, Clone)]

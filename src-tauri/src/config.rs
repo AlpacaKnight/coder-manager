@@ -93,80 +93,113 @@ pub fn write_qwen_settings(settings: &serde_json::Value) -> Result<(), String> {
     fs::write(&path, json).map_err(|e| e.to_string())
 }
 
+fn provider_to_entry(p: &Provider) -> serde_json::Value {
+    serde_json::json!({
+        "id": p.model_name,
+        "name": p.name,
+        "baseUrl": p.api_base_url,
+        "envKey": format!("{}_API_KEY", p.id.to_uppercase()),
+        "providerType": p.provider_type
+    })
+}
+
+fn model_entry_to_json(m: &QwenModelEntry) -> serde_json::Value {
+    let mut entry = serde_json::json!({
+        "id": m.id,
+        "name": m.name,
+        "baseUrl": m.base_url,
+        "envKey": m.env_key
+    });
+    if let Some(ref pt) = m.provider_type {
+        entry.as_object_mut().unwrap().insert("providerType".to_string(), serde_json::json!(pt));
+    }
+    entry
+}
+
+fn set_model_providers(
+    obj: &mut serde_json::Map<String, serde_json::Value>,
+    openai: &[serde_json::Value],
+    anthropic: &[serde_json::Value],
+) {
+    let mp = obj.entry("modelProviders").or_insert_with(|| serde_json::json!({}));
+    if let Some(mp_obj) = mp.as_object_mut() {
+        mp_obj.insert("openai".to_string(), serde_json::json!(openai));
+        if !anthropic.is_empty() {
+            mp_obj.insert("anthropic".to_string(), serde_json::json!(anthropic));
+        }
+    }
+}
+
+fn set_security_auth(
+    obj: &mut serde_json::Map<String, serde_json::Value>,
+    providers: &[Provider],
+) {
+    let has_anthropic = providers.iter().any(|p| p.provider_type == "anthropic");
+    let selected_type = if has_anthropic { "anthropic" } else { "openai" };
+    let security = obj.entry("security").or_insert_with(|| serde_json::json!({}));
+    if let Some(sec_obj) = security.as_object_mut() {
+        let auth = sec_obj.entry("auth").or_insert_with(|| serde_json::json!({}));
+        if let Some(auth_obj) = auth.as_object_mut() {
+            auth_obj.insert("selectedType".to_string(), serde_json::json!(selected_type));
+        }
+    }
+}
+
+fn set_env_keys(
+    obj: &mut serde_json::Map<String, serde_json::Value>,
+    providers: &[Provider],
+) {
+    let env = obj.entry("env").or_insert_with(|| serde_json::json!({}));
+    if let Some(env_obj) = env.as_object_mut() {
+        for p in providers {
+            let env_key = format!("{}_API_KEY", p.id.to_uppercase());
+            env_obj.insert(env_key, serde_json::json!(p.api_key));
+        }
+    }
+}
+
+fn set_model_name(
+    obj: &mut serde_json::Map<String, serde_json::Value>,
+    openai: &[serde_json::Value],
+    anthropic: &[serde_json::Value],
+) {
+    let model = obj.entry("model").or_insert_with(|| serde_json::json!({}));
+    if let Some(model_obj) = model.as_object_mut() {
+        let current_name = model_obj.get("name").and_then(|v| v.as_str()).unwrap_or("");
+        let all_model_ids: Vec<&str> = openai.iter()
+            .chain(anthropic.iter())
+            .filter_map(|v| v.get("id").and_then(|v| v.as_str()))
+            .collect();
+        if current_name.is_empty() || !all_model_ids.contains(&current_name) {
+            if let Some(first) = all_model_ids.first() {
+                model_obj.insert("name".to_string(), serde_json::json!(first));
+            }
+        }
+    }
+}
+
 pub fn merge_providers_to_settings(settings: &mut serde_json::Value, providers: &[Provider]) {
     if !settings.is_object() {
         *settings = serde_json::json!({});
     }
     let obj = settings.as_object_mut().unwrap();
-
-    // Ensure $version = 4
     obj.insert("$version".to_string(), serde_json::json!(4));
 
-    // Group providers by protocol type
     let mut openai_providers: Vec<serde_json::Value> = Vec::new();
     let mut anthropic_providers: Vec<serde_json::Value> = Vec::new();
 
     for p in providers {
-        let entry = serde_json::json!({
-            "id": p.model_name,
-            "name": p.name,
-            "baseUrl": p.api_base_url,
-            "envKey": format!("{}_API_KEY", p.id.to_uppercase())
-        });
+        let entry = provider_to_entry(p);
         match p.provider_type.as_str() {
             "anthropic" => anthropic_providers.push(entry),
             _ => openai_providers.push(entry),
         }
     }
 
-    let model_providers = obj
-        .entry("modelProviders")
-        .or_insert_with(|| serde_json::json!({}));
-    if let Some(mp_obj) = model_providers.as_object_mut() {
-        mp_obj.insert("openai".to_string(), serde_json::json!(openai_providers));
-        if !anthropic_providers.is_empty() {
-            mp_obj.insert(
-                "anthropic".to_string(),
-                serde_json::json!(anthropic_providers),
-            );
-        }
-    }
-
-    // Set security.auth.selectedType based on provider types present
-    let has_anthropic = providers.iter().any(|p| p.provider_type == "anthropic");
-    let selected_type = if has_anthropic { "anthropic" } else { "openai" };
-    let security = obj
-        .entry("security")
-        .or_insert_with(|| serde_json::json!({}));
-    if let Some(sec_obj) = security.as_object_mut() {
-        let auth = sec_obj
-            .entry("auth")
-            .or_insert_with(|| serde_json::json!({}));
-        if let Some(auth_obj) = auth.as_object_mut() {
-            auth_obj.insert("selectedType".to_string(), serde_json::json!(selected_type));
-        }
-    }
-
-    // Merge env keys
-    let env = obj.entry("env").or_insert_with(|| serde_json::json!({}));
-    if let Some(env_obj) = env.as_object_mut() {
-        for provider in providers {
-            let env_key = format!("{}_API_KEY", provider.id.to_uppercase());
-            env_obj.insert(env_key, serde_json::json!(provider.api_key));
-        }
-    }
-
-    // Set model.name to first provider if not already set to a valid one
-    let model = obj.entry("model").or_insert_with(|| serde_json::json!({}));
-    if let Some(model_obj) = model.as_object_mut() {
-        let current_name = model_obj.get("name").and_then(|v| v.as_str()).unwrap_or("");
-        let valid_ids: Vec<&str> = providers.iter().map(|p| p.model_name.as_str()).collect();
-        if current_name.is_empty() || !valid_ids.contains(&current_name) {
-            if let Some(first) = providers.first() {
-                model_obj.insert("name".to_string(), serde_json::json!(first.model_name));
-            }
-        }
-    }
+    set_model_providers(obj, &openai_providers, &anthropic_providers);
+    set_security_auth(obj, providers);
+    set_env_keys(obj, providers);
+    set_model_name(obj, &openai_providers, &anthropic_providers);
 }
 
 pub fn apply_qwen_model_config(
@@ -179,109 +212,30 @@ pub fn apply_qwen_model_config(
         *settings = serde_json::json!({});
     }
     let obj = settings.as_object_mut().unwrap();
-
     obj.insert("$version".to_string(), serde_json::json!(4));
 
-    // modelProviders — 合并现有保留 + 新注册
     let mut all_openai: Vec<serde_json::Value> = openai_models
         .iter()
-        .map(|m| {
-            let mut entry = serde_json::json!({
-                "id": m.id,
-                "name": m.name,
-                "baseUrl": m.base_url,
-                "envKey": m.env_key
-            });
-            if let Some(ref pt) = m.provider_type {
-                entry
-                    .as_object_mut()
-                    .unwrap()
-                    .insert("providerType".to_string(), serde_json::json!(pt));
-            }
-            entry
-        })
+        .map(model_entry_to_json)
         .collect();
 
     let mut all_anthropic: Vec<serde_json::Value> = anthropic_models
         .iter()
-        .map(|m| {
-            let mut entry = serde_json::json!({
-                "id": m.id,
-                "name": m.name,
-                "baseUrl": m.base_url,
-                "envKey": m.env_key
-            });
-            if let Some(ref pt) = m.provider_type {
-                entry
-                    .as_object_mut()
-                    .unwrap()
-                    .insert("providerType".to_string(), serde_json::json!(pt));
-            }
-            entry
-        })
+        .map(model_entry_to_json)
         .collect();
 
     for p in providers {
-        let entry = serde_json::json!({
-            "id": p.model_name,
-            "name": p.name,
-            "baseUrl": p.api_base_url,
-            "envKey": format!("{}_API_KEY", p.id.to_uppercase()),
-            "providerType": p.provider_type
-        });
+        let entry = provider_to_entry(p);
         match p.provider_type.as_str() {
             "anthropic" => all_anthropic.push(entry),
             _ => all_openai.push(entry),
         }
     }
 
-    let mp = obj
-        .entry("modelProviders")
-        .or_insert_with(|| serde_json::json!({}));
-    if let Some(mp_obj) = mp.as_object_mut() {
-        mp_obj.insert("openai".to_string(), serde_json::json!(all_openai));
-        mp_obj.insert("anthropic".to_string(), serde_json::json!(all_anthropic));
-    }
-
-    // security.auth.selectedType
-    let has_anthropic = !all_anthropic.is_empty();
-    let selected_type = if has_anthropic { "anthropic" } else { "openai" };
-    let security = obj
-        .entry("security")
-        .or_insert_with(|| serde_json::json!({}));
-    if let Some(sec_obj) = security.as_object_mut() {
-        let auth = sec_obj
-            .entry("auth")
-            .or_insert_with(|| serde_json::json!({}));
-        if let Some(auth_obj) = auth.as_object_mut() {
-            auth_obj.insert("selectedType".to_string(), serde_json::json!(selected_type));
-        }
-    }
-
-    // env — 保留已有的 + 新增 provider 的 key
-    let env = obj.entry("env").or_insert_with(|| serde_json::json!({}));
-    if let Some(env_obj) = env.as_object_mut() {
-        for p in providers {
-            let env_key = format!("{}_API_KEY", p.id.to_uppercase());
-            env_obj.insert(env_key, serde_json::json!(p.api_key));
-        }
-    }
-
-    // model.name — 当前活跃模型
-    let model = obj.entry("model").or_insert_with(|| serde_json::json!({}));
-    if let Some(model_obj) = model.as_object_mut() {
-        let current_name = model_obj.get("name").and_then(|v| v.as_str()).unwrap_or("");
-        let all_model_ids: Vec<&str> = all_openai
-            .iter()
-            .chain(all_anthropic.iter())
-            .filter_map(|v| v.get("id").and_then(|v| v.as_str()))
-            .collect();
-        if current_name.is_empty() || !all_model_ids.contains(&current_name) {
-            if let Some(first) = all_model_ids.first() {
-                model_obj.insert("name".to_string(), serde_json::json!(first));
-            }
-        }
-    }
+    set_model_providers(obj, &all_openai, &all_anthropic);
+    set_security_auth(obj, providers);
+    set_env_keys(obj, providers);
+    set_model_name(obj, &all_openai, &all_anthropic);
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

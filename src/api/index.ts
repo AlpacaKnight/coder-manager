@@ -44,3 +44,7 @@ export async function saveToolOrder(order: string[]): Promise<void> {
 export async function getToolsQuick(): Promise<CliTool[]> {
   return invoke('get_tools_quick');
 }
+
+export async function getToolUpdateCommand(name: string): Promise<string | null> {
+  return invoke('get_tool_update_command', { name });
+}
