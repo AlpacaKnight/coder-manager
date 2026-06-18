@@ -89,6 +89,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tauri-plugin-log",
+ "toml 0.8.2",
 ]
 
 [[package]]

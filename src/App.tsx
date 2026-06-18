@@ -6,6 +6,7 @@ import { Header } from './components/Header';
 import { StatusBar } from './components/StatusBar';
 import { Settings } from './pages/Settings';
 import { ModelConfig } from './pages/ModelConfig';
+import { KimiModelConfig } from './pages/KimiModelConfig';
 import { ProviderManagement } from './pages/ProviderManagement';
 import { EnvDetail } from './components/EnvDetail';
 import type { CliTool, EnvCheck, AppConfig, ToolStatus } from './types';
@@ -33,8 +34,9 @@ function App() {
   const configRef = useRef(config);
   const [showSettings, setShowSettings] = useState(false);
   const [showModelConfig, setShowModelConfig] = useState(false);
+  const [showKimiModelConfig, setShowKimiModelConfig] = useState(false);
   const [showProviderMgmt, setShowProviderMgmt] = useState(false);
-  const [previousPage, setPreviousPage] = useState<'home' | 'model-config'>('home');
+  const [previousPage, setPreviousPage] = useState<'home' | 'model-config' | 'kimi-model-config'>('home');
   const [isChecking, setIsChecking] = useState(false);
   const [updatingTools, setUpdatingTools] = useState<Record<string, boolean>>({});
   const [toolActions, setToolActions] = useState<Record<string, ToolAction>>({});
@@ -484,7 +486,13 @@ function App() {
             onClose={() => {
               setShowProviderMgmt(false);
               if (previousPage === 'model-config') setShowModelConfig(true);
+              if (previousPage === 'kimi-model-config') setShowKimiModelConfig(true);
             }}
+          />
+        ) : showKimiModelConfig ? (
+          <KimiModelConfig
+            onClose={() => setShowKimiModelConfig(false)}
+            onOpenProviderMgmt={() => { setPreviousPage('kimi-model-config'); setShowProviderMgmt(true); setShowKimiModelConfig(false); }}
           />
         ) : showModelConfig ? (
           <ModelConfig
@@ -507,6 +515,7 @@ function App() {
               onUninstall={handleUninstall}
               onIgnore={handleIgnore}
               onOpenModelConfig={() => { setPreviousPage('home'); setShowModelConfig(true); }}
+              onOpenKimiModelConfig={() => { setPreviousPage('home'); setShowKimiModelConfig(true); }}
               isUpdating={selectedTool ? !!updatingTools[selectedTool.name] : false}
               activeAction={selectedTool ? toolActions[selectedTool.name] ?? null : null}
             />

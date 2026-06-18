@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
+use std::process::Command;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelEntry {
@@ -301,4 +302,138 @@ fn chrono_lite_now() -> String {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default();
     format!("{}", duration.as_secs())
+}
+
+// Kimi Code 配置相关
+pub fn get_kimi_config_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".kimi-code")
+        .join("config.toml")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KimiProviderEntry {
+    #[serde(rename = "type")]
+    pub provider_type: String,
+    pub base_url: Option<String>,
+    pub api_key: Option<String>,
+    #[serde(default)]
+    pub env: Option<std::collections::HashMap<String, String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct KimiModelEntry {
+    pub provider: String,
+    pub model: String,
+    #[serde(rename = "max_context_size")]
+    pub max_context_size: u64,
+    #[serde(rename = "max_output_size", skip_serializing_if = "Option::is_none")]
+    pub max_output_size: Option<u64>,
+    #[serde(rename = "display_name", skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub capabilities: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct KimiSettings {
+    #[serde(rename = "default_model", skip_serializing_if = "Option::is_none")]
+    pub default_model: Option<String>,
+    #[serde(default)]
+    pub providers: std::collections::HashMap<String, KimiProviderEntry>,
+    #[serde(default)]
+    pub models: std::collections::HashMap<String, KimiModelEntry>,
+}
+
+pub fn read_kimi_settings() -> Result<KimiSettings, String> {
+    let path = get_kimi_config_path();
+    if !path.exists() {
+        return Ok(KimiSettings::default());
+    }
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    toml::from_str(&content).map_err(|e| format!("解析 TOML 失败: {}", e))
+}
+
+pub fn write_kimi_settings(settings: &KimiSettings) -> Result<(), String> {
+    let path = get_kimi_config_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let content = toml::to_string_pretty(settings).map_err(|e| format!("序列化 TOML 失败: {}", e))?;
+    fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+pub fn open_kimi_config_file() -> Result<(), String> {
+    let path = get_kimi_config_path();
+    if !path.exists() {
+        return Err(format!("配置文件不存在: {}", path.display()));
+    }
+    let path_str = path.to_string_lossy().to_string();
+    let mut command = if cfg!(target_os = "windows") {
+        let mut c = Command::new("cmd");
+        c.args(["/C", "start", "", &path_str]);
+        c
+    } else if cfg!(target_os = "macos") {
+        let mut c = Command::new("open");
+        c.arg(&path_str);
+        c
+    } else {
+        let mut c = Command::new("xdg-open");
+        c.arg(&path_str);
+        c
+    };
+    command.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn apply_kimi_model_config(
+    settings: &mut KimiSettings,
+    custom_models: Vec<KimiModelEntry>,
+    providers: &[Provider],
+) {
+    // 添加自定义模型
+    for m in custom_models {
+        let key = m.model.clone();
+        settings.models.insert(key, m);
+    }
+
+    // 将 Provider 转换为 Kimi 配置格式并添加
+    for p in providers {
+        let provider_key = format!("managed:{}", p.id);
+        let provider_type = match p.provider_type.as_str() {
+            "anthropic" => "anthropic",
+            "openai-responses" => "openai_responses",
+            _ => "openai",
+        };
+
+        let kimi_provider = KimiProviderEntry {
+            provider_type: provider_type.to_string(),
+            base_url: Some(p.api_base_url.clone()),
+            api_key: Some(p.api_key.clone()),
+            env: None,
+        };
+        settings.providers.insert(provider_key.clone(), kimi_provider);
+
+        // 为 Provider 的每个模型创建条目
+        for m in &p.models {
+            let model_key = m.id.clone();
+            let kimi_model = KimiModelEntry {
+                provider: provider_key.clone(),
+                model: m.id.clone(),
+                max_context_size: 128000,
+                max_output_size: None,
+                display_name: Some(m.name.clone()),
+                capabilities: None,
+            };
+            settings.models.insert(model_key, kimi_model);
+        }
+    }
+
+    // 设置默认模型（如果尚未设置）
+    if settings.default_model.is_none() || !settings.models.contains_key(settings.default_model.as_deref().unwrap_or("")) {
+        if let Some(first_key) = settings.models.keys().next() {
+            settings.default_model = Some(first_key.clone());
+        }
+    }
 }

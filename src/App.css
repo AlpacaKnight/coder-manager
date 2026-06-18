@@ -991,6 +991,33 @@ body {
   color: #888;
 }
 
+.kimi-context-size-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.kimi-context-label {
+  font-size: 11px;
+  color: #888;
+}
+
+.kimi-context-input {
+  width: 80px;
+  padding: 2px 6px;
+  font-size: 12px;
+  background: #0d1b2a;
+  border: 1px solid #333;
+  border-radius: 4px;
+  color: #eaeaea;
+}
+
+.kimi-context-input:focus {
+  outline: none;
+  border-color: #e94560;
+}
+
 .btn-register {
   align-self: flex-start;
   margin-top: 8px;

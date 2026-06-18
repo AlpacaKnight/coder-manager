@@ -5,7 +5,7 @@ mod updater;
 mod version_check;
 
 use cli_tools::{CliTool, EnvCheck};
-use config::{AppConfig, Provider, QwenModelEntry};
+use config::{AppConfig, Provider, QwenModelEntry, KimiModelEntry, KimiSettings};
 use std::process::Command;
 
 const GITHUB_HOMEPAGE: &str = "https://github.com/AlpacaKnight/coder-manager";
@@ -411,7 +411,37 @@ fn apply_qwen_model_config(
     let mut settings = config::read_qwen_settings()?;
     config::apply_qwen_model_config(&mut settings, &openai_models, &anthropic_models, &providers);
     config::write_qwen_settings(&settings)?;
-    Ok(settings)
+    Ok(serde_json::to_value(&settings).unwrap_or_default())
+}
+
+#[tauri::command]
+fn load_kimi_settings() -> Result<serde_json::Value, String> {
+    let settings = config::read_kimi_settings()?;
+    serde_json::to_value(&settings).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_kimi_settings_file() -> Result<(), String> {
+    config::open_kimi_config_file()
+}
+
+#[tauri::command]
+fn apply_kimi_model_config(
+    custom_models: Vec<KimiModelEntry>,
+    provider_ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let app_config = AppConfig::load();
+    let providers: Vec<Provider> = app_config
+        .providers
+        .iter()
+        .filter(|p| provider_ids.contains(&p.id))
+        .cloned()
+        .collect();
+
+    let mut settings = config::read_kimi_settings()?;
+    config::apply_kimi_model_config(&mut settings, custom_models, &providers);
+    config::write_kimi_settings(&settings)?;
+    serde_json::to_value(&settings).map_err(|e| e.to_string())
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -457,7 +487,10 @@ pub fn run() {
             load_qwen_settings,
             open_qwen_settings_file,
             register_providers_to_qwen,
-            apply_qwen_model_config
+            apply_qwen_model_config,
+            load_kimi_settings,
+            open_kimi_settings_file,
+            apply_kimi_model_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

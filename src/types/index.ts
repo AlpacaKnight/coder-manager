@@ -73,3 +73,35 @@ export interface ModelDisplay {
   provider_id?: string;
   index?: number;
 }
+
+export interface KimiModel {
+  provider: string;
+  model: string;
+  max_context_size: number;
+  max_output_size?: number;
+  display_name?: string;
+  capabilities?: string[];
+}
+
+export interface KimiSettings {
+  default_model?: string;
+  providers: Record<string, KimiProviderConfig>;
+  models: Record<string, KimiModel>;
+}
+
+export interface KimiProviderConfig {
+  type: string;
+  base_url?: string;
+  api_key?: string;
+  env?: Record<string, string>;
+}
+
+export interface KimiModelDisplay {
+  key: string;
+  model_id: string;
+  display_name: string;
+  provider: string;
+  provider_type: string;
+  source: 'existing' | 'provider';
+  provider_id?: string;
+}
