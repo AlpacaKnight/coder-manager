@@ -34,13 +34,19 @@ export interface EnvCheck {
 
 export type ProviderType = 'openai' | 'openai-responses' | 'anthropic';
 
+export interface ModelEntry {
+  id: string;
+  name: string;
+}
+
 export interface Provider {
   id: string;
   name: string;
   api_base_url: string;
-  model_name: string;
   api_key: string;
   provider_type: ProviderType;
+  models: ModelEntry[];
+  model_name?: string;
 }
 
 export interface AppConfig {

@@ -31,6 +31,7 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
   const [loading, setLoading] = useState(true);
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm>({ name: '', id: '', baseUrl: '', envKey: '' });
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     try {
@@ -117,7 +118,7 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
       const protocol = p.provider_type === 'anthropic' ? 'anthropic' : 'openai';
       result.push({
         key,
-        model_name: p.model_name,
+        model_name: p.models.map((m) => m.id).join(', ') || '',
         display_name: p.name,
         protocol,
         source: 'provider',
@@ -127,6 +128,65 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
 
     return result;
   }, [providers, existingOpenai, existingAnthropic, dropdownAddedKeys]);
+
+  // 按 Provider 分组（existing 模型按 protocol 分组，provider 按 provider_id 分组）
+  const groupedModelList = useMemo(() => {
+    const groups: {
+      groupKey: string;
+      groupTitle: string;
+      protocol: 'openai' | 'anthropic';
+      items: ModelDisplay[];
+    }[] = [];
+
+    // 已注册的 OpenAI 模型
+    const existingOpenaiItems = modelList.filter(
+      (item) => item.source === 'existing' && item.protocol === 'openai',
+    );
+    if (existingOpenaiItems.length > 0) {
+      groups.push({
+        groupKey: 'existing:openai',
+        groupTitle: '已注册 OpenAI 模型',
+        protocol: 'openai',
+        items: existingOpenaiItems,
+      });
+    }
+
+    // 已注册的 Anthropic 模型
+    const existingAnthropicItems = modelList.filter(
+      (item) => item.source === 'existing' && item.protocol === 'anthropic',
+    );
+    if (existingAnthropicItems.length > 0) {
+      groups.push({
+        groupKey: 'existing:anthropic',
+        groupTitle: '已注册 Anthropic 模型',
+        protocol: 'anthropic',
+        items: existingAnthropicItems,
+      });
+    }
+
+    // 新增的 Provider（按 provider_id 分组）
+    const providerItems = modelList.filter((item) => item.source === 'provider');
+    for (const item of providerItems) {
+      if (!item.provider_id) continue;
+      groups.push({
+        groupKey: `provider:${item.provider_id}`,
+        groupTitle: item.display_name,
+        protocol: item.protocol,
+        items: [item],
+      });
+    }
+
+    return groups;
+  }, [modelList]);
+
+  const toggleGroup = (groupKey: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  };
 
   // 预览
   const preview = useMemo(() => {
@@ -158,15 +218,18 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
     for (const pid of newProviderIds) {
       const p = providers.find((pr) => pr.id === pid);
       if (!p) continue;
-      const entry: QwenModel = {
-        id: p.model_name,
-        name: p.name,
-        baseUrl: p.api_base_url,
-        envKey: `${p.id.toUpperCase()}_API_KEY`,
-        providerType: p.provider_type,
-      };
-      if (p.provider_type === 'anthropic') allAnthropic.push(entry);
-      else allOpenai.push(entry);
+      // 每个 ModelEntry 生成一个 entry，共用同一 baseUrl/envKey
+      for (const m of p.models) {
+        const entry: QwenModel = {
+          id: m.id,
+          name: m.name,
+          baseUrl: p.api_base_url,
+          envKey: `${p.id.toUpperCase()}_API_KEY`,
+          providerType: p.provider_type,
+        };
+        if (p.provider_type === 'anthropic') allAnthropic.push(entry);
+        else allOpenai.push(entry);
+      }
     }
 
     if (!merged.modelProviders || typeof merged.modelProviders !== 'object') {
@@ -330,7 +393,7 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
                 <option value="">-- 从 Provider 添加模型 --</option>
                 {dropdownOptions.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.name} ({p.model_name})
+                    {p.name} ({p.models.length} 个模型)
                   </option>
                 ))}
               </select>
@@ -359,80 +422,155 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
               <p className="empty-message">暂无可用模型，请先通过上方下拉菜单添加或前往「添加 Provider」创建。</p>
             ) : (
               <div className="provider-select-list">
-                {modelList.map((item) => {
-                  if (editingKey === item.key && item.source === 'existing') {
-                    return (
-                      <div key={item.key} className="provider-edit-form">
-                        <div className="provider-edit-row">
-                          <input
-                            className="model-config-input"
-                            placeholder="显示名称"
-                            value={editForm.name}
-                            onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))}
-                          />
-                          <input
-                            className="model-config-input"
-                            placeholder="模型 ID"
-                            value={editForm.id}
-                            onChange={(e) => setEditForm((f) => ({ ...f, id: e.target.value }))}
-                          />
-                        </div>
-                        <div className="provider-edit-row">
-                          <input
-                            className="model-config-input"
-                            placeholder="Base URL"
-                            value={editForm.baseUrl}
-                            onChange={(e) => setEditForm((f) => ({ ...f, baseUrl: e.target.value }))}
-                          />
-                          <input
-                            className="model-config-input"
-                            placeholder="环境变量 Key"
-                            value={editForm.envKey}
-                            onChange={(e) => setEditForm((f) => ({ ...f, envKey: e.target.value }))}
-                          />
-                        </div>
-                        <div className="provider-edit-actions">
-                          <button className="btn-add-provider" onClick={() => handleEditSave(item.protocol)}>
-                            保存
-                          </button>
-                          <button className="btn-link-action" onClick={handleEditCancel}>
-                            取消
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  }
+                {groupedModelList.map((group) => {
+                  const isExpanded = expandedGroups.has(group.groupKey);
+                  const selectedCount = group.items.filter((item) =>
+                    selectedKeys.has(item.key),
+                  ).length;
 
                   return (
-                    <label key={item.key} className="provider-select-item">
-                      <input
-                        type="checkbox"
-                        checked={selectedKeys.has(item.key)}
-                        onChange={() => toggleSelect(item.key)}
-                      />
-                      <div className="provider-select-info">
-                        <span className="provider-select-name">{item.display_name}</span>
-                        <span className="provider-select-model">{item.model_name}</span>
-                      </div>
-                      <span className={`provider-protocol-tag protocol-${item.protocol}`}>
-                        {PROTOCOL_LABELS[item.protocol]}
-                      </span>
-                      {item.source === 'existing' && (
-                        <span className="provider-source-badge">已注册</span>
-                      )}
-                      {item.source === 'provider' && (
-                        <span className="provider-source-badge provider-source-new">新增</span>
-                      )}
-                      {item.source === 'existing' && !editingKey && (
-                        <button
-                          className="btn-provider-edit"
-                          onClick={(e) => { e.preventDefault(); handleEditStart(item); }}
-                          title="编辑"
+                    <div key={group.groupKey} className="provider-group">
+                      <div
+                        className="provider-group-header"
+                        onClick={() => toggleGroup(group.groupKey)}
+                      >
+                        <span className="provider-group-toggle">
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
+                        <span className="provider-group-title">{group.groupTitle}</span>
+                        <span className="provider-group-count">
+                          {selectedCount}/{group.items.length}
+                        </span>
+                        <span
+                          className={`provider-protocol-tag protocol-${group.protocol}`}
                         >
-                          ✎
-                        </button>
+                          {PROTOCOL_LABELS[group.protocol]}
+                        </span>
+                      </div>
+                      {isExpanded && (
+                        <div className="provider-group-models">
+                          {group.items.map((item) => {
+                            if (
+                              editingKey === item.key &&
+                              item.source === 'existing'
+                            ) {
+                              return (
+                                <div
+                                  key={item.key}
+                                  className="provider-edit-form"
+                                >
+                                  <div className="provider-edit-row">
+                                    <input
+                                      className="model-config-input"
+                                      placeholder="显示名称"
+                                      value={editForm.name}
+                                      onChange={(e) =>
+                                        setEditForm((f) => ({
+                                          ...f,
+                                          name: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                    <input
+                                      className="model-config-input"
+                                      placeholder="模型 ID"
+                                      value={editForm.id}
+                                      onChange={(e) =>
+                                        setEditForm((f) => ({
+                                          ...f,
+                                          id: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <div className="provider-edit-row">
+                                    <input
+                                      className="model-config-input"
+                                      placeholder="Base URL"
+                                      value={editForm.baseUrl}
+                                      onChange={(e) =>
+                                        setEditForm((f) => ({
+                                          ...f,
+                                          baseUrl: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                    <input
+                                      className="model-config-input"
+                                      placeholder="环境变量 Key"
+                                      value={editForm.envKey}
+                                      onChange={(e) =>
+                                        setEditForm((f) => ({
+                                          ...f,
+                                          envKey: e.target.value,
+                                        }))
+                                      }
+                                    />
+                                  </div>
+                                  <div className="provider-edit-actions">
+                                    <button
+                                      className="btn-add-provider"
+                                      onClick={() => handleEditSave(item.protocol)}
+                                    >
+                                      保存
+                                    </button>
+                                    <button
+                                      className="btn-link-action"
+                                      onClick={handleEditCancel}
+                                    >
+                                      取消
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <label
+                                key={item.key}
+                                className="provider-select-item"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedKeys.has(item.key)}
+                                  onChange={() => toggleSelect(item.key)}
+                                />
+                                <div className="provider-select-info">
+                                  <span className="provider-select-name">
+                                    {item.display_name}
+                                  </span>
+                                  <span className="provider-select-model">
+                                    {item.model_name}
+                                  </span>
+                                </div>
+                                {item.source === 'existing' && (
+                                  <span className="provider-source-badge">
+                                    已注册
+                                  </span>
+                                )}
+                                {item.source === 'provider' && (
+                                  <span className="provider-source-badge provider-source-new">
+                                    新增
+                                  </span>
+                                )}
+                                {item.source === 'existing' && !editingKey && (
+                                  <button
+                                    className="btn-provider-edit"
+                                    onClick={(e) => {
+                                      e.preventDefault();
+                                      handleEditStart(item);
+                                    }}
+                                    title="编辑"
+                                  >
+                                    ✎
+                                  </button>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
                       )}
-                    </label>
+                    </div>
                   );
                 })}
               </div>

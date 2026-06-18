@@ -3,18 +3,44 @@ use std::fs;
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModelEntry {
+    pub id: String,
+    pub name: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Provider {
     pub id: String,
     pub name: String,
     pub api_base_url: String,
-    pub model_name: String,
     pub api_key: String,
     #[serde(default = "default_provider_type")]
     pub provider_type: String,
+    #[serde(default)]
+    pub models: Vec<ModelEntry>,
+    #[serde(default)]
+    pub model_name: Option<String>,
 }
 
 fn default_provider_type() -> String {
     "openai".to_string()
+}
+
+impl Provider {
+    /// 向后兼容：若 `models` 为空但旧字段 `model_name` 有值，则回填到 `models`。
+    pub fn migrate_model_name(&mut self) {
+        if self.models.is_empty() {
+            if let Some(mn) = self.model_name.take() {
+                let trimmed = mn.trim();
+                if !trimmed.is_empty() {
+                    self.models = vec![ModelEntry {
+                        id: trimmed.to_string(),
+                        name: trimmed.to_string(),
+                    }];
+                }
+            }
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -30,14 +56,19 @@ pub struct AppConfig {
 impl AppConfig {
     pub fn load() -> Self {
         let config_path = get_config_path();
-        if config_path.exists() {
+        let mut config = if config_path.exists() {
             fs::read_to_string(&config_path)
                 .ok()
                 .and_then(|s| serde_json::from_str(&s).ok())
                 .unwrap_or_default()
         } else {
             Self::default()
+        };
+        // 向后兼容：把旧的 model_name 单字段迁移到 models 数组
+        for p in &mut config.providers {
+            p.migrate_model_name();
         }
+        config
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -93,14 +124,21 @@ pub fn write_qwen_settings(settings: &serde_json::Value) -> Result<(), String> {
     fs::write(&path, json).map_err(|e| e.to_string())
 }
 
-fn provider_to_entry(p: &Provider) -> serde_json::Value {
-    serde_json::json!({
-        "id": p.model_name,
-        "name": p.name,
-        "baseUrl": p.api_base_url,
-        "envKey": format!("{}_API_KEY", p.id.to_uppercase()),
-        "providerType": p.provider_type
-    })
+/// 将一个 Provider 展开为多个模型条目。
+/// 每个 `ModelEntry` 生成一个独立的 entry，共用同一个 `baseUrl` 和 `envKey`。
+fn provider_to_entries(p: &Provider) -> Vec<serde_json::Value> {
+    p.models
+        .iter()
+        .map(|m| {
+            serde_json::json!({
+                "id": m.id,
+                "name": m.name,
+                "baseUrl": p.api_base_url,
+                "envKey": format!("{}_API_KEY", p.id.to_uppercase()),
+                "providerType": p.provider_type
+            })
+        })
+        .collect()
 }
 
 fn model_entry_to_json(m: &QwenModelEntry) -> serde_json::Value {
@@ -189,10 +227,10 @@ pub fn merge_providers_to_settings(settings: &mut serde_json::Value, providers: 
     let mut anthropic_providers: Vec<serde_json::Value> = Vec::new();
 
     for p in providers {
-        let entry = provider_to_entry(p);
+        let entries = provider_to_entries(p);
         match p.provider_type.as_str() {
-            "anthropic" => anthropic_providers.push(entry),
-            _ => openai_providers.push(entry),
+            "anthropic" => anthropic_providers.extend(entries),
+            _ => openai_providers.extend(entries),
         }
     }
 
@@ -225,10 +263,10 @@ pub fn apply_qwen_model_config(
         .collect();
 
     for p in providers {
-        let entry = provider_to_entry(p);
+        let entries = provider_to_entries(p);
         match p.provider_type.as_str() {
-            "anthropic" => all_anthropic.push(entry),
-            _ => all_openai.push(entry),
+            "anthropic" => all_anthropic.extend(entries),
+            _ => all_openai.extend(entries),
         }
     }
 
