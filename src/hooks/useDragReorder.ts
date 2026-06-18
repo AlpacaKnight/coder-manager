@@ -1,74 +1,119 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import type { PointerEvent, RefObject } from 'react';
 
 interface UseDragReorderOptions<T> {
   items: T[];
-  onReorder: (reordered: T[]) => void;
+  onReorder: (items: T[]) => void;
 }
 
-export function useDragReorder<T>({ items, onReorder }: UseDragReorderOptions<T>) {
+interface UseDragReorderResult {
+  dragIndex: number | null;
+  dragOverIndex: number | null;
+  containerRef: RefObject<HTMLDivElement | null>;
+  handlePointerDown: (event: PointerEvent, index: number) => void;
+  handleContainerClick: () => boolean;
+}
+
+export function useDragReorder<T extends object>({ items, onReorder }: UseDragReorderOptions<T>): UseDragReorderResult {
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  const dragStartPos = useRef<{ x: number; y: number } | null>(null);
-  const hasMoved = useRef(false);
-  const containerRef = useRef<HTMLDivElement | null>(null);
+  const dragIndexRef = useRef<number | null>(null);
+  const dragOverIndexRef = useRef<number | null>(null);
+  const itemsRef = useRef<T[]>(items);
+  const clickSuppressedRef = useRef(false);
+  const isDraggingRef = useRef(false);
 
   useEffect(() => {
-    if (dragIndex === null || dragStartPos.current === null) return;
-    const startPos = dragStartPos.current;
+    itemsRef.current = items;
+  }, [items]);
 
-    const onPointerMove = (e: PointerEvent) => {
-      const dx = e.clientX - startPos.x;
-      const dy = e.clientY - startPos.y;
-      if (!hasMoved.current && Math.sqrt(dx * dx + dy * dy) > 5) {
-        hasMoved.current = true;
+  const findIndexFromPointer = useCallback((event: PointerEvent): number | null => {
+    const container = containerRef.current;
+    if (!container) return null;
+
+    const children = Array.from(container.children) as HTMLElement[];
+    const y = event.clientY;
+
+    for (let i = 0; i < children.length; i += 1) {
+      const rect = children[i].getBoundingClientRect();
+      if (y >= rect.top && y <= rect.bottom) {
+        return i;
       }
-      if (hasMoved.current) {
-        const els = document.elementsFromPoint(e.clientX, e.clientY);
-        const item = els.find(el => el.classList?.contains('drag-item'));
-        if (item && containerRef.current) {
-          const children = containerRef.current.children;
-          for (let i = 0; i < children.length; i++) {
-            if (children[i] === item) {
-              setDragOverIndex(i);
-              return;
-            }
-          }
-        }
-      }
+    }
+
+    return null;
+  }, []);
+
+  const updateDragOver = useCallback((event: PointerEvent) => {
+    if (!isDraggingRef.current) return;
+    const overIndex = findIndexFromPointer(event);
+    if (overIndex !== null && overIndex !== dragOverIndexRef.current) {
+      dragOverIndexRef.current = overIndex;
+      setDragOverIndex(overIndex);
+    }
+  }, [findIndexFromPointer]);
+
+  const endDrag = useCallback(() => {
+    if (!isDraggingRef.current) return;
+
+    const sourceIndex = dragIndexRef.current;
+    const targetIndex = dragOverIndexRef.current;
+
+    isDraggingRef.current = false;
+    dragIndexRef.current = null;
+    dragOverIndexRef.current = null;
+    setDragIndex(null);
+    setDragOverIndex(null);
+
+    if (sourceIndex !== null && targetIndex !== null && sourceIndex !== targetIndex) {
+      const nextItems = [...itemsRef.current];
+      const [movedItem] = nextItems.splice(sourceIndex, 1);
+      nextItems.splice(targetIndex, 0, movedItem);
+      onReorder(nextItems);
+    }
+  }, [onReorder]);
+
+  useEffect(() => {
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!isDraggingRef.current) return;
+      clickSuppressedRef.current = true;
+      updateDragOver(event);
     };
 
-    const onPointerUp = () => {
-      if (hasMoved.current && dragIndex !== null && dragOverIndex !== null && dragIndex !== dragOverIndex) {
-        const reordered = [...items];
-        const [moved] = reordered.splice(dragIndex, 1);
-        reordered.splice(dragOverIndex, 0, moved);
-        onReorder(reordered);
-      }
-      setDragIndex(null);
-      setDragOverIndex(null);
-      dragStartPos.current = null;
-      hasMoved.current = false;
-      document.removeEventListener('pointermove', onPointerMove);
-      document.removeEventListener('pointerup', onPointerUp);
+    const handlePointerUp = () => {
+      if (!isDraggingRef.current) return;
+      endDrag();
     };
 
-    document.addEventListener('pointermove', onPointerMove);
-    document.addEventListener('pointerup', onPointerUp);
-    return () => {
-      document.removeEventListener('pointermove', onPointerMove);
-      document.removeEventListener('pointerup', onPointerUp);
-    };
-  }, [dragIndex, items, dragOverIndex, onReorder]);
+    if (isDraggingRef.current) {
+      window.addEventListener('pointermove', handlePointerMove as any);
+      window.addEventListener('pointerup', handlePointerUp as any);
 
-  const handlePointerDown = useCallback((e: React.PointerEvent, index: number) => {
-    e.preventDefault();
-    dragStartPos.current = { x: e.clientX, y: e.clientY };
-    hasMoved.current = false;
+      return () => {
+        window.removeEventListener('pointermove', handlePointerMove as any);
+        window.removeEventListener('pointerup', handlePointerUp as any);
+      };
+    }
+
+    return undefined;
+  }, [endDrag, updateDragOver]);
+
+  const handlePointerDown = useCallback((event: PointerEvent, index: number) => {
+    event.preventDefault();
+    isDraggingRef.current = true;
+    clickSuppressedRef.current = false;
+    dragIndexRef.current = index;
+    dragOverIndexRef.current = index;
     setDragIndex(index);
+    setDragOverIndex(index);
+    event.currentTarget.setPointerCapture(event.pointerId);
   }, []);
 
   const handleContainerClick = useCallback(() => {
-    return hasMoved.current;
+    const shouldSuppress = clickSuppressedRef.current;
+    clickSuppressedRef.current = false;
+    return shouldSuppress;
   }, []);
 
   return {
