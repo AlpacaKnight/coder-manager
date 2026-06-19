@@ -5,7 +5,7 @@ mod updater;
 mod version_check;
 
 use cli_tools::{CliTool, EnvCheck};
-use config::{AppConfig, Provider, QwenModelEntry, KimiModelEntry, KimiSettings};
+use config::{AppConfig, Provider, QwenModelEntry, KimiModelEntry, KimiSettings, OpenCodeSettings};
 use std::process::Command;
 
 const GITHUB_HOMEPAGE: &str = "https://github.com/AlpacaKnight/coder-manager";
@@ -444,6 +444,35 @@ fn apply_kimi_model_config(
     serde_json::to_value(&settings).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn load_opencode_settings() -> Result<serde_json::Value, String> {
+    let settings = config::read_opencode_settings()?;
+    serde_json::to_value(&settings).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_opencode_settings_file() -> Result<(), String> {
+    config::open_opencode_config_file()
+}
+
+#[tauri::command]
+fn apply_opencode_model_config(
+    provider_ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let app_config = AppConfig::load();
+    let providers: Vec<Provider> = app_config
+        .providers
+        .iter()
+        .filter(|p| provider_ids.contains(&p.id))
+        .cloned()
+        .collect();
+
+    let mut settings = config::read_opencode_settings()?;
+    config::apply_opencode_model_config(&mut settings, &providers);
+    config::write_opencode_settings(&settings)?;
+    serde_json::to_value(&settings).map_err(|e| e.to_string())
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -490,7 +519,10 @@ pub fn run() {
             apply_qwen_model_config,
             load_kimi_settings,
             open_kimi_settings_file,
-            apply_kimi_model_config
+            apply_kimi_model_config,
+            load_opencode_settings,
+            open_opencode_settings_file,
+            apply_opencode_model_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

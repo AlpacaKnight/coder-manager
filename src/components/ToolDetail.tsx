@@ -10,6 +10,7 @@ interface ToolDetailProps {
   onIgnore: (name: string) => void;
   onOpenModelConfig?: () => void;
   onOpenKimiModelConfig?: () => void;
+  onOpenOpenCodeModelConfig?: () => void;
   isUpdating: boolean;
   activeAction?: 'update' | 'install' | 'uninstall' | null;
 }
@@ -34,7 +35,7 @@ const statusClasses: Record<string, string> = {
   Checking: 'checking',
 };
 
-export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, onOpenModelConfig, onOpenKimiModelConfig, isUpdating, activeAction }: ToolDetailProps) {
+export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, onOpenModelConfig, onOpenKimiModelConfig, onOpenOpenCodeModelConfig, isUpdating, activeAction }: ToolDetailProps) {
   const [updateCommand, setUpdateCommand] = useState<string | null>(null);
 
   useEffect(() => {
@@ -143,6 +144,15 @@ export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, o
           <button
             className="btn-model-config"
             onClick={() => onOpenKimiModelConfig?.()}
+          >
+            配置模型
+          </button>
+        )}
+
+        {tool.name === 'opencode' && (
+          <button
+            className="btn-model-config"
+            onClick={() => onOpenOpenCodeModelConfig?.()}
           >
             配置模型
           </button>

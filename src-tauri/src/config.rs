@@ -387,6 +387,113 @@ pub fn open_kimi_config_file() -> Result<(), String> {
     Ok(())
 }
 
+// OpenCode 配置相关
+pub fn get_opencode_config_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".config")
+        .join("opencode")
+        .join("opencode.json")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OpenCodeProviderOptions {
+    #[serde(rename = "apiKey", skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(rename = "baseURL", skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    #[serde(rename = "setCacheKey", skip_serializing_if = "Option::is_none")]
+    pub set_cache_key: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OpenCodeProviderEntry {
+    #[serde(rename = "npm", skip_serializing_if = "Option::is_none")]
+    pub npm: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub options: Option<OpenCodeProviderOptions>,
+    #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub models: std::collections::HashMap<String, serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct OpenCodeSettings {
+    #[serde(default, rename = "provider", skip_serializing_if = "std::collections::HashMap::is_empty")]
+    pub provider: std::collections::HashMap<String, OpenCodeProviderEntry>,
+}
+
+pub fn read_opencode_settings() -> Result<OpenCodeSettings, String> {
+    let path = get_opencode_config_path();
+    if !path.exists() {
+        return Ok(OpenCodeSettings::default());
+    }
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| format!("解析 JSON 失败: {}", e))
+}
+
+pub fn write_opencode_settings(settings: &OpenCodeSettings) -> Result<(), String> {
+    let path = get_opencode_config_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let content = serde_json::to_string_pretty(settings).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+pub fn open_opencode_config_file() -> Result<(), String> {
+    let path = get_opencode_config_path();
+    if !path.exists() {
+        return Err(format!("配置文件不存在: {}", path.display()));
+    }
+    let path_str = path.to_string_lossy().to_string();
+    let mut command = if cfg!(target_os = "windows") {
+        let mut c = Command::new("cmd");
+        c.args(["/C", "start", "", &path_str]);
+        c
+    } else if cfg!(target_os = "macos") {
+        let mut c = Command::new("open");
+        c.arg(&path_str);
+        c
+    } else {
+        let mut c = Command::new("xdg-open");
+        c.arg(&path_str);
+        c
+    };
+    command.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn apply_opencode_model_config(
+    settings: &mut OpenCodeSettings,
+    providers: &[Provider],
+) {
+    for p in providers {
+        let npm = match p.provider_type.as_str() {
+            "anthropic" => "@ai-sdk/anthropic",
+            "openai-responses" | "openai" => "@ai-sdk/openai",
+            _ => "@ai-sdk/openai-compatible",
+        };
+
+        let mut models = std::collections::HashMap::new();
+        for m in &p.models {
+            let mut model_obj = serde_json::Map::new();
+            model_obj.insert("name".to_string(), serde_json::Value::String(m.name.clone()));
+            models.insert(m.id.clone(), serde_json::Value::Object(model_obj));
+        }
+
+        let opencode_provider = OpenCodeProviderEntry {
+            npm: Some(npm.to_string()),
+            options: Some(OpenCodeProviderOptions {
+                api_key: Some(p.api_key.clone()),
+                base_url: None,
+                set_cache_key: None,
+            }),
+            models,
+        };
+        settings.provider.insert(p.id.clone(), opencode_provider);
+    }
+}
+
 pub fn apply_kimi_model_config(
     settings: &mut KimiSettings,
     custom_models: Vec<KimiModelEntry>,

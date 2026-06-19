@@ -105,3 +105,27 @@ export interface KimiModelDisplay {
   source: 'existing' | 'provider';
   provider_id?: string;
 }
+
+export interface OpenCodeProviderOptions {
+  apiKey?: string;
+  baseURL?: string;
+  setCacheKey?: boolean;
+}
+
+export interface OpenCodeProviderConfig {
+  npm?: string;
+  options?: OpenCodeProviderOptions;
+  models?: Record<string, unknown>;
+}
+
+export interface OpenCodeSettings {
+  provider: Record<string, OpenCodeProviderConfig>;
+}
+
+export interface OpenCodeProviderDisplay {
+  key: string;
+  provider_id: string;
+  provider_type: string;
+  has_api_key: boolean;
+  source: 'existing' | 'provider';
+}
