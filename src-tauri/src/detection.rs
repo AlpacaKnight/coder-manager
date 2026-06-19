@@ -261,6 +261,14 @@ fn enriched_path() -> String {
     let mut paths = Vec::new();
     let mut seen = HashSet::new();
 
+    if let Some(install_dir) = env::var_os("KIMI_INSTALL_DIR").map(PathBuf::from) {
+        push_existing_path(&mut paths, &mut seen, install_dir.join("bin"));
+    }
+
+    if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
+        push_existing_path(&mut paths, &mut seen, home.join(".kimi-code/bin"));
+    }
+
     if let Ok(path) = env::var("PATH") {
         for entry in env::split_paths(&path) {
             push_existing_path(&mut paths, &mut seen, entry);
@@ -268,7 +276,6 @@ fn enriched_path() -> String {
     }
 
     if let Some(home) = env::var_os("HOME").map(PathBuf::from) {
-        push_existing_path(&mut paths, &mut seen, home.join(".kimi-code/bin"));
         push_existing_path(&mut paths, &mut seen, home.join(".local/bin"));
         push_existing_path(&mut paths, &mut seen, home.join(".cargo/bin"));
         push_existing_path(&mut paths, &mut seen, home.join(".npm-global/bin"));
@@ -282,10 +289,6 @@ fn enriched_path() -> String {
             &mut seen,
             &home.join(".local/share/fnm/node-versions"),
         );
-    }
-
-    if let Some(install_dir) = env::var_os("KIMI_INSTALL_DIR").map(PathBuf::from) {
-        push_existing_path(&mut paths, &mut seen, install_dir.join("bin"));
     }
 
     env::join_paths(paths)
