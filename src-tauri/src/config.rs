@@ -485,7 +485,7 @@ pub fn apply_opencode_model_config(
             npm: Some(npm.to_string()),
             options: Some(OpenCodeProviderOptions {
                 api_key: Some(p.api_key.clone()),
-                base_url: None,
+                base_url: Some(p.api_base_url.clone()),
                 set_cache_key: None,
             }),
             models,

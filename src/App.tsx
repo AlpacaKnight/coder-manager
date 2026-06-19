@@ -100,8 +100,7 @@ function App() {
             } else if (hasLatest) {
               nextStatus = updateAvailable ? 'UpdateAvailable' : 'UpToDate';
             } else {
-              // 无法获取最新版本，显示为 UpToDate
-              nextStatus = 'UpToDate';
+              nextStatus = t.can_auto_update ? 'Error' : 'ManualUpdate';
             }
 
             const updatedTool: CliTool = {
@@ -130,7 +129,7 @@ function App() {
       setTools((prevTools) =>
         prevTools.map((t) => {
           if (t.name === toolName) {
-            const nextStatus: ToolStatus = t.current_version ? 'UpToDate' : 'NotInstalled';
+            const nextStatus: ToolStatus = t.current_version ? 'Error' : 'NotInstalled';
             const updatedTool = {
               ...t,
               status: nextStatus,
@@ -290,6 +289,11 @@ function App() {
       await reloadToolsFromLocal(selectedTool?.name ?? null);
     } catch (error) {
       console.error('Failed to update all:', error);
+      try {
+        await reloadToolsFromLocal(selectedTool?.name ?? null);
+      } catch (reloadError) {
+        console.error('Failed to reload tools after batch update:', reloadError);
+      }
       alert(`批量更新失败: ${error}`);
     } finally {
       const updateFinished: Record<string, boolean> = {};

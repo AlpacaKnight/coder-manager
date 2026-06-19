@@ -229,24 +229,30 @@ async fn update_all_tools(tools: Vec<CliTool>) -> Vec<(String, Result<String, St
 }
 
 #[tauri::command]
-async fn batch_update_tools(names: Vec<String>) -> Vec<(String, Result<String, String>)> {
+async fn batch_update_tools(names: Vec<String>) -> Result<Vec<String>, String> {
     tauri::async_runtime::spawn_blocking(move || {
         let definitions = cli_tools::CliToolsRegistry::get_supported_tools();
-        let selected: Vec<&cli_tools::CliToolDefinition> = definitions
-            .iter()
-            .filter(|d| names.contains(&d.name))
-            .collect();
+        let mut updated = Vec::new();
+        let mut failures = Vec::new();
 
-        selected
-            .into_iter()
-            .map(|def| {
-                let result = updater::update_tool_by_definition(def);
-                (def.name.clone(), result)
-            })
-            .collect()
+        for name in names {
+            match definitions.iter().find(|definition| definition.name == name) {
+                Some(definition) => match updater::update_tool_by_definition(definition) {
+                    Ok(_) => updated.push(name),
+                    Err(error) => failures.push(format!("{}: {}", name, error.trim())),
+                },
+                None => failures.push(format!("{}: tool not found", name)),
+            }
+        }
+
+        if failures.is_empty() {
+            Ok(updated)
+        } else {
+            Err(failures.join("\n"))
+        }
     })
     .await
-    .unwrap_or_else(|_| vec![])
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]

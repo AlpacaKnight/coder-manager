@@ -132,6 +132,9 @@ fn detect_tool(definition: &CliToolDefinition, ignored: &[String]) -> CliTool {
 
 fn get_tool_version(definition: &CliToolDefinition) -> Option<String> {
     let output = run_command(&definition.version_command)?;
+    if !output.status.success() {
+        return None;
+    }
 
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);

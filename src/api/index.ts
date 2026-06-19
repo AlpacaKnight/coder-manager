@@ -17,7 +17,7 @@ export async function updateTool(name: string): Promise<string> {
   return invoke('update_tool', { name });
 }
 
-export async function batchUpdateTools(names: string[]): Promise<{name: string, result: string}[]> {
+export async function batchUpdateTools(names: string[]): Promise<string[]> {
   return invoke('batch_update_tools', { names });
 }
 

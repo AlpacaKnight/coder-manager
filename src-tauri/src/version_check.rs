@@ -80,12 +80,11 @@ pub fn check_for_updates(tools: &mut [CliTool]) {
                     };
                 }
                 Err(_) => {
-                    // 无法获取最新版本，但工具已安装，就显示为已是最新版本
-                    tool.status = ToolStatus::UpToDate;
+                    tool.status = ToolStatus::Error;
                 }
             }
         } else {
-            tool.status = ToolStatus::UpToDate;
+            tool.status = ToolStatus::Error;
         }
     }
 }
@@ -102,13 +101,8 @@ pub fn get_latest_version(source: &LatestVersionSource) -> Result<String, String
 fn get_npm_latest_version(package: &str) -> Result<String, String> {
     let output = run_command_with_timeout(
         "npm",
-        &[
-            "view",
-            package,
-            "version",
-            "--connect-timeout=3000",
-            "--request-timeout=3000",
-        ],
+        &["view", package, "version"],
+
         VERSION_QUERY_TIMEOUT,
     )?;
 
@@ -128,7 +122,8 @@ fn get_crates_latest_version(package: &str) -> Result<String, String> {
 
     if output.status.success() {
         let stdout = String::from_utf8_lossy(&output.stdout);
-        let regex = Regex::new(r#"version" = "([^"]+)""#).map_err(|e| e.to_string())?;
+        let pattern = format!(r#"(?m)^{}\s*=\s*"([^"]+)""#, regex::escape(package));
+        let regex = Regex::new(&pattern).map_err(|e| e.to_string())?;
         regex
             .captures(&stdout)
             .and_then(|cap| cap.get(1))
@@ -160,8 +155,16 @@ fn run_command_with_timeout(
     args: &[&str],
     timeout: Duration,
 ) -> Result<Output, String> {
-    let mut child = Command::new(program)
-        .args(args)
+    #[cfg(target_os = "windows")]
+    let executable = if program.eq_ignore_ascii_case("npm") {
+        "npm.cmd"
+    } else {
+        program
+    };
+    #[cfg(not(target_os = "windows"))]
+    let executable = program;
+
+    let mut child = Command::new(executable)        .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

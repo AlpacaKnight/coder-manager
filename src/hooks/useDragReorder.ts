@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import type { PointerEvent, RefObject } from 'react';
+import type { PointerEvent as ReactPointerEvent, RefObject } from 'react';
 
 interface UseDragReorderOptions<T> {
   items: T[];
@@ -10,7 +10,7 @@ interface UseDragReorderResult {
   dragIndex: number | null;
   dragOverIndex: number | null;
   containerRef: RefObject<HTMLDivElement | null>;
-  handlePointerDown: (event: PointerEvent, index: number) => void;
+  handlePointerDown: (event: ReactPointerEvent, index: number) => void;
   handleContainerClick: () => boolean;
 }
 
@@ -86,20 +86,16 @@ export function useDragReorder<T extends object>({ items, onReorder }: UseDragRe
       endDrag();
     };
 
-    if (isDraggingRef.current) {
-      window.addEventListener('pointermove', handlePointerMove as any);
-      window.addEventListener('pointerup', handlePointerUp as any);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
 
-      return () => {
-        window.removeEventListener('pointermove', handlePointerMove as any);
-        window.removeEventListener('pointerup', handlePointerUp as any);
-      };
-    }
-
-    return undefined;
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
   }, [endDrag, updateDragOver]);
 
-  const handlePointerDown = useCallback((event: PointerEvent, index: number) => {
+  const handlePointerDown = useCallback((event: ReactPointerEvent, index: number) => {
     event.preventDefault();
     isDraggingRef.current = true;
     clickSuppressedRef.current = false;
