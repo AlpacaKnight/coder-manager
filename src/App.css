@@ -304,6 +304,17 @@ body {
   cursor: not-allowed;
 }
 
+.btn-danger {
+  background: transparent;
+  color: #e94560;
+  border: 1px solid #e94560;
+}
+
+.btn-danger:hover {
+  background: #e94560;
+  color: white;
+}
+
 .btn-secondary {
   background: #0f3460;
   color: white;

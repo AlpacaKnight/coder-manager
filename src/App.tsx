@@ -8,6 +8,7 @@ import { Settings } from './pages/Settings';
 import { ModelConfig } from './pages/ModelConfig';
 import { KimiModelConfig } from './pages/KimiModelConfig';
 import { OpenCodeModelConfig } from './pages/OpenCodeModelConfig';
+import { CodeBuddyModelConfig } from './pages/CodeBuddyModelConfig';
 import { ProviderManagement } from './pages/ProviderManagement';
 import { EnvDetail } from './components/EnvDetail';
 import type { CliTool, EnvCheck, AppConfig, ToolStatus } from './types';
@@ -37,8 +38,9 @@ function App() {
   const [showModelConfig, setShowModelConfig] = useState(false);
   const [showKimiModelConfig, setShowKimiModelConfig] = useState(false);
   const [showOpenCodeModelConfig, setShowOpenCodeModelConfig] = useState(false);
+  const [showCodeBuddyModelConfig, setShowCodeBuddyModelConfig] = useState(false);
   const [showProviderMgmt, setShowProviderMgmt] = useState(false);
-  const [previousPage, setPreviousPage] = useState<'home' | 'model-config' | 'kimi-model-config' | 'opencode-model-config'>('home');
+  const [previousPage, setPreviousPage] = useState<'home' | 'model-config' | 'kimi-model-config' | 'opencode-model-config' | 'codebuddy-model-config'>('home');
   const [isChecking, setIsChecking] = useState(false);
   const [updatingTools, setUpdatingTools] = useState<Record<string, boolean>>({});
   const [toolActions, setToolActions] = useState<Record<string, ToolAction>>({});
@@ -494,7 +496,13 @@ function App() {
               if (previousPage === 'model-config') setShowModelConfig(true);
               if (previousPage === 'kimi-model-config') setShowKimiModelConfig(true);
               if (previousPage === 'opencode-model-config') setShowOpenCodeModelConfig(true);
+              if (previousPage === 'codebuddy-model-config') setShowCodeBuddyModelConfig(true);
             }}
+          />
+        ) : showCodeBuddyModelConfig ? (
+          <CodeBuddyModelConfig
+            onClose={() => setShowCodeBuddyModelConfig(false)}
+            onOpenProviderMgmt={() => { setPreviousPage('codebuddy-model-config'); setShowProviderMgmt(true); setShowCodeBuddyModelConfig(false); }}
           />
         ) : showOpenCodeModelConfig ? (
           <OpenCodeModelConfig
@@ -529,6 +537,7 @@ function App() {
               onOpenModelConfig={() => { setPreviousPage('home'); setShowModelConfig(true); }}
               onOpenKimiModelConfig={() => { setPreviousPage('home'); setShowKimiModelConfig(true); }}
               onOpenOpenCodeModelConfig={() => { setPreviousPage('home'); setShowOpenCodeModelConfig(true); }}
+              onOpenCodeBuddyModelConfig={() => { setPreviousPage('home'); setShowCodeBuddyModelConfig(true); }}
               isUpdating={selectedTool ? !!updatingTools[selectedTool.name] : false}
               activeAction={selectedTool ? toolActions[selectedTool.name] ?? null : null}
             />

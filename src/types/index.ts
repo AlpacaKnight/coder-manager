@@ -129,3 +129,30 @@ export interface OpenCodeProviderDisplay {
   has_api_key: boolean;
   source: 'existing' | 'provider';
 }
+
+export interface CodeBuddyModel {
+  id: string;
+  name?: string;
+  vendor?: string;
+  apiKey?: string;
+  maxInputTokens?: number;
+  maxOutputTokens?: number;
+  url?: string;
+  supportsToolCall?: boolean;
+  supportsImages?: boolean;
+  supportsReasoning?: boolean;
+}
+
+export interface CodeBuddyModelsConfig {
+  models: CodeBuddyModel[];
+  availableModels?: string[];
+}
+
+export interface CodeBuddyModelDisplay {
+  key: string;
+  model_id: string;
+  display_name: string;
+  vendor: string;
+  source: 'existing' | 'provider';
+  provider_id?: string;
+}

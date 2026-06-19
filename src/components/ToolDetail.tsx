@@ -11,6 +11,7 @@ interface ToolDetailProps {
   onOpenModelConfig?: () => void;
   onOpenKimiModelConfig?: () => void;
   onOpenOpenCodeModelConfig?: () => void;
+  onOpenCodeBuddyModelConfig?: () => void;
   isUpdating: boolean;
   activeAction?: 'update' | 'install' | 'uninstall' | null;
 }
@@ -35,7 +36,7 @@ const statusClasses: Record<string, string> = {
   Checking: 'checking',
 };
 
-export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, onOpenModelConfig, onOpenKimiModelConfig, onOpenOpenCodeModelConfig, isUpdating, activeAction }: ToolDetailProps) {
+export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, onOpenModelConfig, onOpenKimiModelConfig, onOpenOpenCodeModelConfig, onOpenCodeBuddyModelConfig, isUpdating, activeAction }: ToolDetailProps) {
   const [updateCommand, setUpdateCommand] = useState<string | null>(null);
 
   useEffect(() => {
@@ -153,6 +154,15 @@ export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, o
           <button
             className="btn-model-config"
             onClick={() => onOpenOpenCodeModelConfig?.()}
+          >
+            配置模型
+          </button>
+        )}
+
+        {tool.name === 'codebuddy' && (
+          <button
+            className="btn-model-config"
+            onClick={() => onOpenCodeBuddyModelConfig?.()}
           >
             配置模型
           </button>

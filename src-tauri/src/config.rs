@@ -544,3 +544,135 @@ pub fn apply_kimi_model_config(
         }
     }
 }
+
+// CodeBuddy 配置相关
+pub fn get_codebuddy_models_config_path() -> PathBuf {
+    dirs::home_dir()
+        .unwrap_or_else(|| PathBuf::from("."))
+        .join(".codebuddy")
+        .join("models.json")
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CodeBuddyModelEntry {
+    pub id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub vendor: Option<String>,
+    #[serde(rename = "apiKey", skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
+    #[serde(rename = "maxInputTokens", skip_serializing_if = "Option::is_none")]
+    pub max_input_tokens: Option<u64>,
+    #[serde(rename = "maxOutputTokens", skip_serializing_if = "Option::is_none")]
+    pub max_output_tokens: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
+    #[serde(rename = "supportsToolCall", skip_serializing_if = "Option::is_none")]
+    pub supports_tool_call: Option<bool>,
+    #[serde(rename = "supportsImages", skip_serializing_if = "Option::is_none")]
+    pub supports_images: Option<bool>,
+    #[serde(rename = "supportsReasoning", skip_serializing_if = "Option::is_none")]
+    pub supports_reasoning: Option<bool>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct CodeBuddyModelsConfig {
+    #[serde(default)]
+    pub models: Vec<CodeBuddyModelEntry>,
+    #[serde(rename = "availableModels", default, skip_serializing_if = "Vec::is_empty")]
+    pub available_models: Vec<String>,
+}
+
+pub fn read_codebuddy_models_config() -> Result<CodeBuddyModelsConfig, String> {
+    let path = get_codebuddy_models_config_path();
+    if !path.exists() {
+        return Ok(CodeBuddyModelsConfig::default());
+    }
+    let content = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+    serde_json::from_str(&content).map_err(|e| format!("解析 JSON 失败: {}", e))
+}
+
+pub fn write_codebuddy_models_config(config: &CodeBuddyModelsConfig) -> Result<(), String> {
+    let path = get_codebuddy_models_config_path();
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+    }
+    let content = serde_json::to_string_pretty(config).map_err(|e| e.to_string())?;
+    fs::write(&path, content).map_err(|e| e.to_string())
+}
+
+pub fn open_codebuddy_models_config_file() -> Result<(), String> {
+    let path = get_codebuddy_models_config_path();
+    if !path.exists() {
+        // 创建空配置文件
+        let config = CodeBuddyModelsConfig::default();
+        write_codebuddy_models_config(&config)?;
+    }
+    let path_str = path.to_string_lossy().to_string();
+    let mut command = if cfg!(target_os = "windows") {
+        let mut c = Command::new("cmd");
+        c.args(["/C", "start", "", &path_str]);
+        c
+    } else if cfg!(target_os = "macos") {
+        let mut c = Command::new("open");
+        c.arg(&path_str);
+        c
+    } else {
+        let mut c = Command::new("xdg-open");
+        c.arg(&path_str);
+        c
+    };
+    command.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+pub fn apply_codebuddy_model_config(
+    config: &mut CodeBuddyModelsConfig,
+    custom_models: Vec<CodeBuddyModelEntry>,
+    provider_ids: &[String],
+    providers: &[Provider],
+) {
+    // 保留用户已有的自定义模型
+    let existing_models: Vec<CodeBuddyModelEntry> = custom_models;
+
+    // 清空模型列表，重新构建
+    config.models.clear();
+
+    // 添加用户选择的已有模型
+    for m in existing_models {
+        config.models.push(m);
+    }
+
+    // 将 Provider 转换为 CodeBuddy 配置格式并添加
+    for pid in provider_ids {
+        if let Some(p) = providers.iter().find(|pr| &pr.id == pid) {
+            for m in &p.models {
+                let model = CodeBuddyModelEntry {
+                    id: m.id.clone(),
+                    name: Some(m.name.clone()),
+                    vendor: Some(p.name.clone()),
+                    api_key: Some(p.api_key.clone()),
+                    max_input_tokens: Some(128000),
+                    max_output_tokens: Some(4096),
+                    url: Some(format!("{}/chat/completions", p.api_base_url.trim_end_matches('/'))),
+                    supports_tool_call: Some(true),
+                    supports_images: Some(false),
+                    supports_reasoning: None,
+                };
+                config.models.push(model);
+            }
+        }
+    }
+
+    // 更新 availableModels
+    config.available_models = config.models.iter().map(|m| m.id.clone()).collect();
+}
+
+pub fn delete_codebuddy_models_config() -> Result<(), String> {
+    let path = get_codebuddy_models_config_path();
+    if !path.exists() {
+        return Ok(());
+    }
+    fs::remove_file(&path).map_err(|e| format!("删除配置文件失败: {}", e))
+}

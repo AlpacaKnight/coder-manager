@@ -479,6 +479,41 @@ fn apply_opencode_model_config(
     serde_json::to_value(&settings).map_err(|e| e.to_string())
 }
 
+#[tauri::command]
+fn load_codebuddy_models_config() -> Result<serde_json::Value, String> {
+    let config = config::read_codebuddy_models_config()?;
+    serde_json::to_value(&config).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_codebuddy_models_config_file() -> Result<(), String> {
+    config::open_codebuddy_models_config_file()
+}
+
+#[tauri::command]
+fn apply_codebuddy_model_config(
+    custom_models: Vec<config::CodeBuddyModelEntry>,
+    provider_ids: Vec<String>,
+) -> Result<serde_json::Value, String> {
+    let app_config = AppConfig::load();
+    let providers: Vec<config::Provider> = app_config
+        .providers
+        .iter()
+        .filter(|p| provider_ids.contains(&p.id))
+        .cloned()
+        .collect();
+
+    let mut settings = config::read_codebuddy_models_config()?;
+    config::apply_codebuddy_model_config(&mut settings, custom_models, &provider_ids, &providers);
+    config::write_codebuddy_models_config(&settings)?;
+    serde_json::to_value(&settings).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_codebuddy_models_config() -> Result<(), String> {
+    config::delete_codebuddy_models_config()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -528,7 +563,11 @@ pub fn run() {
             apply_kimi_model_config,
             load_opencode_settings,
             open_opencode_settings_file,
-            apply_opencode_model_config
+            apply_opencode_model_config,
+            load_codebuddy_models_config,
+            open_codebuddy_models_config_file,
+            apply_codebuddy_model_config,
+            delete_codebuddy_models_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
