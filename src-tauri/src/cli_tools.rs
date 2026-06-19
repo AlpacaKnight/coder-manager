@@ -200,21 +200,6 @@ impl CliToolsRegistry {
                 update_command_unix: None,
             },
             CliToolDefinition {
-                name: "bailian".to_string(),
-                display_name: "百炼 CLI".to_string(),
-                command_name: None,
-                version_command: "bailian --version".to_string(),
-                version_regex: r"(\d+\.\d+\.\d+)".to_string(),
-                latest_version_source: LatestVersionSource::Npm("bailian-cli".to_string()),
-                can_auto_update: true,
-                update_command: "npm install -g bailian-cli".to_string(),
-                install_command: "npm install -g bailian-cli".to_string(),
-                #[cfg(not(target_os = "windows"))]
-                install_command_unix: None,
-                #[cfg(not(target_os = "windows"))]
-                update_command_unix: None,
-            },
-            CliToolDefinition {
                 name: "reasonix".to_string(),
                 display_name: "Reasonix".to_string(),
                 command_name: None,

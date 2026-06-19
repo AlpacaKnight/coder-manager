@@ -34,7 +34,6 @@
 - deepcode-cli
 - codebuddy-code
 - kilo-cli
-- 百炼 CLI
 - Reasonix
 - MiMo Code
 
