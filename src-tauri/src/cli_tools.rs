@@ -51,7 +51,7 @@ impl CliToolsRegistry {
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::CratesIo("abtop".to_string()),
                 can_auto_update: true,
-                update_command: "cargo install abtop".to_string(),
+                update_command: "cargo install abtop --force".to_string(),
                 install_command: "cargo install abtop".to_string(),
                 #[cfg(not(target_os = "windows"))]
                 install_command_unix: None,
