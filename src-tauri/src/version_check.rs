@@ -116,7 +116,7 @@ fn get_npm_latest_version(package: &str) -> Result<String, String> {
 fn get_crates_latest_version(package: &str) -> Result<String, String> {
     let output = run_command_with_timeout(
         "cargo",
-        &["search", package, "--limit", "1"],
+        &["search", package, "--limit", "1", "--registry", "crates-io"],
         VERSION_QUERY_TIMEOUT,
     )?;
 
