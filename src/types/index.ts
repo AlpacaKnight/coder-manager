@@ -128,6 +128,8 @@ export interface OpenCodeProviderDisplay {
   provider_type: string;
   has_api_key: boolean;
   source: 'existing' | 'provider';
+  model_id?: string;
+  model_name?: string;
 }
 
 export interface CodeBuddyModel {

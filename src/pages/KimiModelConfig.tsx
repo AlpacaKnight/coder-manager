@@ -25,6 +25,7 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
   const [registering, setRegistering] = useState(false);
   const [loading, setLoading] = useState(true);
   const [contextSizeOverrides, setContextSizeOverrides] = useState<Record<string, number>>({});
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     try {
@@ -140,7 +141,16 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
     return groups;
   }, [modelList, kimiSettings]);
 
-  const toggleGroup = (groupKey: string) => {
+  const toggleGroupExpand = (groupKey: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  };
+
+  const toggleGroupSelect = (groupKey: string) => {
     setSelectedKeys((prev) => {
       const next = new Set(prev);
       const group = groupedModelList.find((g) => g.groupKey === groupKey);
@@ -273,7 +283,11 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
       if (item.source === 'existing') {
         const modelKey = item.key.replace('existing:', '');
         const m = kimiSettings.models[modelKey];
-        if (m) keepModels.push(m);
+        if (m) {
+          // 应用用户修改的上下文窗口大小（避免只改了预览没落盘）
+          const override = contextSizeOverrides[modelKey];
+          keepModels.push(override !== undefined ? { ...m, max_context_size: override } : m);
+        }
       }
     }
 
@@ -350,6 +364,7 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
             ) : (
               <div className="provider-select-list">
                 {groupedModelList.map((group) => {
+                  const isExpanded = expandedGroups.has(group.groupKey);
                   const selectedCount = group.items.filter((item) =>
                     selectedKeys.has(item.key),
                   ).length;
@@ -359,14 +374,17 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
                     <div key={group.groupKey} className="provider-group">
                       <div
                         className="provider-group-header"
-                        onClick={() => toggleGroup(group.groupKey)}
+                        onClick={() => toggleGroupExpand(group.groupKey)}
                       >
                         <input
                           type="checkbox"
                           checked={allSelected}
-                          onChange={() => toggleGroup(group.groupKey)}
+                          onChange={() => toggleGroupSelect(group.groupKey)}
                           onClick={(e) => e.stopPropagation()}
                         />
+                        <span className="provider-group-toggle">
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
                         <span className="provider-group-title">{group.groupTitle}</span>
                         <span className="provider-group-count">
                           {selectedCount}/{group.items.length}
@@ -375,61 +393,63 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
                           {PROVIDER_TYPE_LABELS[group.providerType] || group.providerType}
                         </span>
                       </div>
-                      <div className="provider-group-models">
-                        {group.items.map((item) => {
-                          const modelKey = item.key.replace('existing:', '');
-                          const currentContextSize = contextSizeOverrides[modelKey] ||
-                            (item.source === 'existing' ? kimiSettings.models[modelKey]?.max_context_size : 128000);
+                      {isExpanded && (
+                        <div className="provider-group-models">
+                          {group.items.map((item) => {
+                            const modelKey = item.key.replace('existing:', '');
+                            const currentContextSize = contextSizeOverrides[modelKey] ||
+                              (item.source === 'existing' ? kimiSettings.models[modelKey]?.max_context_size : 128000);
 
-                          return (
-                            <label
-                              key={item.key}
-                              className="provider-select-item"
-                            >
-                              <input
-                                type="checkbox"
-                                checked={selectedKeys.has(item.key)}
-                                onChange={() => toggleSelect(item.key)}
-                              />
-                              <div className="provider-select-info">
-                                <span className="provider-select-name">
-                                  {item.display_name}
-                                </span>
-                                <span className="provider-select-model">
-                                  {item.model_id}
-                                </span>
-                              </div>
-                              <div className="kimi-context-size-input">
-                                <label className="kimi-context-label">上下文:</label>
+                            return (
+                              <label
+                                key={item.key}
+                                className="provider-select-item"
+                              >
                                 <input
-                                  type="number"
-                                  className="kimi-context-input"
-                                  value={currentContextSize}
-                                  onChange={(e) => {
-                                    const value = parseInt(e.target.value) || 128000;
-                                    setContextSizeOverrides((prev) => ({
-                                      ...prev,
-                                      [modelKey]: value,
-                                    }));
-                                  }}
-                                  min={1}
-                                  title="上下文窗口大小（tokens）"
+                                  type="checkbox"
+                                  checked={selectedKeys.has(item.key)}
+                                  onChange={() => toggleSelect(item.key)}
                                 />
-                              </div>
-                              {item.source === 'existing' && (
-                                <span className="provider-source-badge">
-                                  已注册
-                                </span>
-                              )}
-                              {item.source === 'provider' && (
-                                <span className="provider-source-badge provider-source-new">
-                                  新增
-                                </span>
-                              )}
-                            </label>
-                          );
-                        })}
-                      </div>
+                                <div className="provider-select-info">
+                                  <span className="provider-select-name">
+                                    {item.display_name}
+                                  </span>
+                                  <span className="provider-select-model">
+                                    {item.model_id}
+                                  </span>
+                                </div>
+                                <div className="kimi-context-size-input">
+                                  <label className="kimi-context-label">上下文:</label>
+                                  <input
+                                    type="number"
+                                    className="kimi-context-input"
+                                    value={currentContextSize}
+                                    onChange={(e) => {
+                                      const value = parseInt(e.target.value) || 128000;
+                                      setContextSizeOverrides((prev) => ({
+                                        ...prev,
+                                        [modelKey]: value,
+                                      }));
+                                    }}
+                                    min={1}
+                                    title="上下文窗口大小（tokens）"
+                                  />
+                                </div>
+                                {item.source === 'existing' && (
+                                  <span className="provider-source-badge">
+                                    已注册
+                                  </span>
+                                )}
+                                {item.source === 'provider' && (
+                                  <span className="provider-source-badge provider-source-new">
+                                    新增
+                                  </span>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

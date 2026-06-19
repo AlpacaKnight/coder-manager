@@ -1,6 +1,11 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { invoke } from '@tauri-apps/api/core';
-import type { Provider, OpenCodeSettings, OpenCodeProviderDisplay } from '../types';
+import type {
+  Provider,
+  OpenCodeSettings,
+  OpenCodeProviderConfig,
+  OpenCodeProviderDisplay,
+} from '../types';
 
 interface OpenCodeModelConfigProps {
   onClose: () => void;
@@ -37,6 +42,7 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
   const [dropdownValue, setDropdownValue] = useState('');
   const [registering, setRegistering] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   const loadData = useCallback(async () => {
     try {
@@ -48,8 +54,16 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
       setOpencodeSettings(settings);
 
       const keys = new Set<string>();
-      for (const key of Object.keys(settings.provider)) {
-        keys.add(`existing:${key}`);
+      for (const [providerKey, p] of Object.entries(settings.provider)) {
+        // 按模型展开：一个 provider 下的每个模型都是独立勾选项
+        if (p.models && Object.keys(p.models).length > 0) {
+          for (const modelId of Object.keys(p.models)) {
+            keys.add(`existing:${providerKey}::${modelId}`);
+          }
+        } else {
+          // 没有 models 的 provider 保留为整组勾选项
+          keys.add(`existing:${providerKey}`);
+        }
       }
       setSelectedKeys(keys);
       setDropdownAddedKeys(new Set());
@@ -77,17 +91,35 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
     });
   }, [providers, dropdownAddedKeys]);
 
+  // 统一展示列表：existing 按模型展开，provider 为整组
   const providerList = useMemo((): OpenCodeProviderDisplay[] => {
     const result: OpenCodeProviderDisplay[] = [];
 
-    for (const [key, p] of Object.entries(opencodeSettings.provider)) {
-      result.push({
-        key: `existing:${key}`,
-        provider_id: key,
-        provider_type: npmToProviderType(p.npm),
-        has_api_key: Boolean(p.options?.apiKey),
-        source: 'existing',
-      });
+    for (const [providerKey, p] of Object.entries(opencodeSettings.provider)) {
+      const providerType = npmToProviderType(p.npm);
+      const hasApiKey = Boolean(p.options?.apiKey);
+      if (p.models && Object.keys(p.models).length > 0) {
+        for (const [modelId, modelValue] of Object.entries(p.models)) {
+          const modelName = (modelValue as { name?: string })?.name || modelId;
+          result.push({
+            key: `existing:${providerKey}::${modelId}`,
+            provider_id: providerKey,
+            provider_type: providerType,
+            has_api_key: hasApiKey,
+            source: 'existing',
+            model_id: modelId,
+            model_name: modelName,
+          });
+        }
+      } else {
+        result.push({
+          key: `existing:${providerKey}`,
+          provider_id: providerKey,
+          provider_type: providerType,
+          has_api_key: hasApiKey,
+          source: 'existing',
+        });
+      }
     }
 
     for (const key of dropdownAddedKeys) {
@@ -106,6 +138,7 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
     return result;
   }, [providers, opencodeSettings, dropdownAddedKeys]);
 
+  // 按 provider 分组
   const groupedProviderList = useMemo(() => {
     const groups: {
       groupKey: string;
@@ -114,21 +147,22 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
       items: OpenCodeProviderDisplay[];
     }[] = [];
 
-    const existingItems = providerList.filter((item) => item.source === 'existing');
-    const typeGroups = new Map<string, OpenCodeProviderDisplay[]>();
-    for (const item of existingItems) {
-      const groupKey = item.provider_type;
-      if (!typeGroups.has(groupKey)) {
-        typeGroups.set(groupKey, []);
+    const providerGroups = new Map<string, OpenCodeProviderDisplay[]>();
+    for (const item of providerList) {
+      if (item.source !== 'existing') continue;
+      if (!providerGroups.has(item.provider_id)) {
+        providerGroups.set(item.provider_id, []);
       }
-      typeGroups.get(groupKey)!.push(item);
+      providerGroups.get(item.provider_id)!.push(item);
     }
 
-    for (const [type, items] of typeGroups) {
+    for (const [providerId, items] of providerGroups) {
+      const providerConfig = opencodeSettings.provider[providerId];
+      const npm = providerConfig?.npm;
       groups.push({
-        groupKey: `existing:${type}`,
-        groupTitle: NPM_TO_LABEL[providerTypeToNpm(type)] || type,
-        providerType: type,
+        groupKey: `existing:${providerId}`,
+        groupTitle: providerId,
+        providerType: npmToProviderType(npm),
         items,
       });
     }
@@ -144,39 +178,95 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
     }
 
     return groups;
-  }, [providerList]);
+  }, [providerList, opencodeSettings]);
 
-  const preview = useMemo(() => {
-    const config: Record<string, unknown> = {};
+  const toggleGroupExpand = (groupKey: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  };
 
-    const providerConfig: Record<string, unknown> = {};
-    for (const item of providerList) {
-      if (!selectedKeys.has(item.key)) continue;
+  const toggleGroupSelect = (groupKey: string) => {
+    setSelectedKeys((prev) => {
+      const next = new Set(prev);
+      const group = groupedProviderList.find((g) => g.groupKey === groupKey);
+      if (!group) return next;
 
-      if (item.source === 'existing') {
-        const p = opencodeSettings.provider[item.provider_id];
-        if (p) {
-          providerConfig[item.provider_id] = {
-            npm: p.npm,
-            ...(p.options && { options: p.options }),
-            ...(p.models && Object.keys(p.models).length > 0 && { models: p.models }),
-          };
-        }
-      } else if (item.source === 'provider') {
-        const p = providers.find((pr) => pr.id === item.provider_id);
-        if (p) {
-          const npm = providerTypeToNpm(p.provider_type);
-          providerConfig[item.provider_id] = {
-            npm,
-            options: {
-              apiKey: p.api_key,
-            },
-          };
+      const allSelected = group.items.every((item) => next.has(item.key));
+      for (const item of group.items) {
+        if (allSelected) {
+          next.delete(item.key);
+        } else {
+          next.add(item.key);
         }
       }
-    }
-    config.provider = providerConfig;
+      return next;
+    });
+  };
 
+  // 预览：按选中集合重建 provider 配置
+  const preview = useMemo(() => {
+    const config: Record<string, unknown> = {};
+    const providerConfig: Record<string, unknown> = {};
+
+    // existing：按 provider 聚合，每个 provider 重建只含勾选模型的 models map
+    const groupedExisting = new Map<string, OpenCodeProviderDisplay[]>();
+    for (const item of providerList) {
+      if (!selectedKeys.has(item.key)) continue;
+      if (item.source !== 'existing') continue;
+      if (!groupedExisting.has(item.provider_id)) {
+        groupedExisting.set(item.provider_id, []);
+      }
+      groupedExisting.get(item.provider_id)!.push(item);
+    }
+
+    for (const [providerId, items] of groupedExisting) {
+      const p = opencodeSettings.provider[providerId];
+      if (!p) continue;
+      const hasModelItems = items.some((i) => i.model_id !== undefined);
+      if (hasModelItems) {
+        // 模型级：重建 models map，只含勾选模型
+        const models: Record<string, unknown> = {};
+        for (const item of items) {
+          if (item.model_id && p.models) {
+            models[item.model_id] = p.models[item.model_id];
+          }
+        }
+        providerConfig[providerId] = {
+          npm: p.npm,
+          ...(p.options && { options: p.options }),
+          ...(Object.keys(models).length > 0 && { models }),
+        };
+      } else {
+        // 无模型 provider：整体保留
+        providerConfig[providerId] = {
+          npm: p.npm,
+          ...(p.options && { options: p.options }),
+          ...(p.models && Object.keys(p.models).length > 0 && { models: p.models }),
+        };
+      }
+    }
+
+    // 新增 provider（整组）
+    for (const item of providerList) {
+      if (!selectedKeys.has(item.key)) continue;
+      if (item.source !== 'provider') continue;
+      const p = providers.find((pr) => pr.id === item.provider_id);
+      if (p) {
+        const npm = providerTypeToNpm(p.provider_type);
+        providerConfig[item.provider_id] = {
+          npm,
+          options: {
+            apiKey: p.api_key,
+          },
+        };
+      }
+    }
+
+    config.provider = providerConfig;
     return JSON.stringify(config, null, 2);
   }, [selectedKeys, providerList, opencodeSettings, providers]);
 
@@ -197,24 +287,6 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
     });
   };
 
-  const toggleGroup = (groupKey: string) => {
-    setSelectedKeys((prev) => {
-      const next = new Set(prev);
-      const group = groupedProviderList.find((g) => g.groupKey === groupKey);
-      if (!group) return next;
-
-      const allSelected = group.items.every((item) => next.has(item.key));
-      for (const item of group.items) {
-        if (allSelected) {
-          next.delete(item.key);
-        } else {
-          next.add(item.key);
-        }
-      }
-      return next;
-    });
-  };
-
   const handleOpenSettingsFile = async () => {
     try {
       await invoke('open_opencode_settings_file');
@@ -224,8 +296,44 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
   };
 
   const handleRegister = async () => {
-    const newProviderIds: string[] = [];
+    // 按 provider 聚合选中的 existing 项，重建每个 provider 的配置（含精简后的 models map）
+    const groupedExisting = new Map<string, OpenCodeProviderDisplay[]>();
+    for (const item of providerList) {
+      if (!selectedKeys.has(item.key)) continue;
+      if (item.source !== 'existing') continue;
+      if (!groupedExisting.has(item.provider_id)) {
+        groupedExisting.set(item.provider_id, []);
+      }
+      groupedExisting.get(item.provider_id)!.push(item);
+    }
 
+    const keptProviders: Record<string, OpenCodeProviderConfig> = {};
+    for (const [providerId, items] of groupedExisting) {
+      const p = opencodeSettings.provider[providerId];
+      if (!p) continue;
+      const hasModelItems = items.some((i) => i.model_id !== undefined);
+      if (hasModelItems) {
+        const models: Record<string, unknown> = {};
+        for (const item of items) {
+          if (item.model_id && p.models) {
+            models[item.model_id] = p.models[item.model_id];
+          }
+        }
+        keptProviders[providerId] = {
+          npm: p.npm,
+          options: p.options,
+          models,
+        };
+      } else {
+        keptProviders[providerId] = {
+          npm: p.npm,
+          options: p.options,
+          models: p.models,
+        };
+      }
+    }
+
+    const newProviderIds: string[] = [];
     for (const item of providerList) {
       if (!selectedKeys.has(item.key)) continue;
       if (item.source === 'provider') {
@@ -236,6 +344,7 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
     setRegistering(true);
     try {
       const result = await invoke<OpenCodeSettings>('apply_opencode_model_config', {
+        keptProviders,
         providerIds: newProviderIds,
       });
       setOpencodeSettings(result);
@@ -305,6 +414,7 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
             ) : (
               <div className="provider-select-list">
                 {groupedProviderList.map((group) => {
+                  const isExpanded = expandedGroups.has(group.groupKey);
                   const selectedCount = group.items.filter((item) =>
                     selectedKeys.has(item.key),
                   ).length;
@@ -314,14 +424,17 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
                     <div key={group.groupKey} className="provider-group">
                       <div
                         className="provider-group-header"
-                        onClick={() => toggleGroup(group.groupKey)}
+                        onClick={() => toggleGroupExpand(group.groupKey)}
                       >
                         <input
                           type="checkbox"
                           checked={allSelected}
-                          onChange={() => toggleGroup(group.groupKey)}
+                          onChange={() => toggleGroupSelect(group.groupKey)}
                           onClick={(e) => e.stopPropagation()}
                         />
+                        <span className="provider-group-toggle">
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
                         <span className="provider-group-title">{group.groupTitle}</span>
                         <span className="provider-group-count">
                           {selectedCount}/{group.items.length}
@@ -330,38 +443,40 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
                           {NPM_TO_LABEL[providerTypeToNpm(group.providerType)] || group.providerType}
                         </span>
                       </div>
-                      <div className="provider-group-models">
-                        {group.items.map((item) => (
-                          <label
-                            key={item.key}
-                            className="provider-select-item"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedKeys.has(item.key)}
-                              onChange={() => toggleSelect(item.key)}
-                            />
-                            <div className="provider-select-info">
-                              <span className="provider-select-name">
-                                {item.provider_id}
-                              </span>
-                              <span className="provider-select-model">
-                                {item.has_api_key ? 'API Key 已配置' : '未配置 API Key'}
-                              </span>
-                            </div>
-                            {item.source === 'existing' && (
-                              <span className="provider-source-badge">
-                                已注册
-                              </span>
-                            )}
-                            {item.source === 'provider' && (
-                              <span className="provider-source-badge provider-source-new">
-                                新增
-                              </span>
-                            )}
-                          </label>
-                        ))}
-                      </div>
+                      {isExpanded && (
+                        <div className="provider-group-models">
+                          {group.items.map((item) => (
+                            <label
+                              key={item.key}
+                              className="provider-select-item"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={selectedKeys.has(item.key)}
+                                onChange={() => toggleSelect(item.key)}
+                              />
+                              <div className="provider-select-info">
+                                <span className="provider-select-name">
+                                  {item.model_id || item.provider_id}
+                                </span>
+                                <span className="provider-select-model">
+                                  {item.has_api_key ? 'API Key 已配置' : '未配置 API Key'}
+                                </span>
+                              </div>
+                              {item.source === 'existing' && (
+                                <span className="provider-source-badge">
+                                  已注册
+                                </span>
+                              )}
+                              {item.source === 'provider' && (
+                                <span className="provider-source-badge provider-source-new">
+                                  新增
+                                </span>
+                              )}
+                            </label>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

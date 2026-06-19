@@ -15,6 +15,9 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
   const [dropdownValue, setDropdownValue] = useState('');
   const [registering, setRegistering] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  // 模型上下文长度覆盖：key 为 modelId，value 为 { input, output }
+  const [tokenOverrides, setTokenOverrides] = useState<Record<string, { input: number; output: number }>>({});
 
   const loadData = useCallback(async () => {
     try {
@@ -73,14 +76,17 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
       const pid = key.replace('provider:', '');
       const p = providers.find((pr) => pr.id === pid);
       if (!p) continue;
-      result.push({
-        key,
-        model_id: p.models.map((m) => m.id).join(', ') || '',
-        display_name: p.name,
-        vendor: p.name,
-        source: 'provider',
-        provider_id: p.id,
-      });
+      // 按模型展开：每个模型都是独立勾选项（与 existing 一致）
+      for (const m of p.models) {
+        result.push({
+          key: `provider:${pid}::${m.id}`,
+          model_id: m.id,
+          display_name: m.name || m.id,
+          vendor: p.name,
+          source: 'provider',
+          provider_id: p.id,
+        });
+      }
     }
 
     return result;
@@ -110,19 +116,36 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
       });
     }
 
+    // 新增 Provider：按 provider_id 聚合为一组，组内每个模型单独可选
+    const providerGroups = new Map<string, CodeBuddyModelDisplay[]>();
     for (const item of modelList.filter((i) => i.source === 'provider')) {
       if (!item.provider_id) continue;
+      if (!providerGroups.has(item.provider_id)) {
+        providerGroups.set(item.provider_id, []);
+      }
+      providerGroups.get(item.provider_id)!.push(item);
+    }
+    for (const [pid, items] of providerGroups) {
       groups.push({
-        groupKey: `provider:${item.provider_id}`,
-        groupTitle: item.display_name,
-        items: [item],
+        groupKey: `provider:${pid}`,
+        groupTitle: items[0]?.display_name || pid,
+        items,
       });
     }
 
     return groups;
   }, [modelList]);
 
-  const toggleGroup = (groupKey: string) => {
+  const toggleGroupExpand = (groupKey: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) next.delete(groupKey);
+      else next.add(groupKey);
+      return next;
+    });
+  };
+
+  const toggleGroupSelect = (groupKey: string) => {
     setSelectedKeys((prev) => {
       const next = new Set(prev);
       const group = groupedModelList.find((g) => g.groupKey === groupKey);
@@ -142,7 +165,6 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
 
   const preview = useMemo(() => {
     const selectedModels: CodeBuddyModel[] = [];
-    const newProviderIds: string[] = [];
 
     for (const item of modelList) {
       if (!selectedKeys.has(item.key)) continue;
@@ -150,27 +172,23 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
       if (item.source === 'existing') {
         const idx = parseInt(item.key.replace('existing:', ''), 10);
         const m = modelsConfig.models[idx];
-        if (m) selectedModels.push(m);
+        if (m) {
+          // 应用用户修改的上下文长度
+          const ov = tokenOverrides[m.id];
+          selectedModels.push(ov ? { ...m, maxInputTokens: ov.input, maxOutputTokens: ov.output } : m);
+        }
       } else if (item.provider_id) {
-        newProviderIds.push(item.provider_id);
-      }
-    }
-
-    const config: CodeBuddyModelsConfig = {
-      models: [...selectedModels],
-    };
-
-    for (const pid of newProviderIds) {
-      const p = providers.find((pr) => pr.id === pid);
-      if (p) {
-        for (const m of p.models) {
-          config.models.push({
-            id: m.id,
-            name: m.name,
+        // 新增 provider 的单个模型项：按勾选构造独立 entry
+        const p = providers.find((pr) => pr.id === item.provider_id);
+        if (p) {
+          const ov = tokenOverrides[item.model_id];
+          selectedModels.push({
+            id: item.model_id,
+            name: item.display_name,
             vendor: p.name,
             apiKey: p.api_key,
-            maxInputTokens: 128000,
-            maxOutputTokens: 4096,
+            maxInputTokens: ov?.input ?? 128000,
+            maxOutputTokens: ov?.output ?? 4096,
             url: `${p.api_base_url.replace(/\/$/, '')}/chat/completions`,
             supportsToolCall: true,
             supportsImages: false,
@@ -179,16 +197,27 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
       }
     }
 
+    const config: CodeBuddyModelsConfig = {
+      models: [...selectedModels],
+    };
     config.availableModels = config.models.map((m) => m.id);
 
     return JSON.stringify(config, null, 2);
-  }, [selectedKeys, modelList, modelsConfig, providers]);
+  }, [selectedKeys, modelList, modelsConfig, providers, tokenOverrides]);
 
   const handleDropdownAdd = () => {
     if (!dropdownValue) return;
-    const key = `provider:${dropdownValue}`;
-    setDropdownAddedKeys((prev) => new Set(prev).add(key));
-    setSelectedKeys((prev) => new Set(prev).add(key));
+    const pid = dropdownValue;
+    const p = providers.find((pr) => pr.id === pid);
+    // dropdownAddedKeys 存整 provider key（过滤下拉项），selectedKeys 存各模型项 key
+    setDropdownAddedKeys((prev) => new Set(prev).add(`provider:${pid}`));
+    if (p && p.models.length > 0) {
+      setSelectedKeys((prev) => {
+        const next = new Set(prev);
+        for (const m of p.models) next.add(`provider:${pid}::${m.id}`);
+        return next;
+      });
+    }
     setDropdownValue('');
   };
 
@@ -226,7 +255,6 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
 
   const handleRegister = async () => {
     const keepModels: CodeBuddyModel[] = [];
-    const newProviderIds: string[] = [];
 
     for (const item of modelList) {
       if (!selectedKeys.has(item.key)) continue;
@@ -234,19 +262,38 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
       if (item.source === 'existing') {
         const idx = parseInt(item.key.replace('existing:', ''), 10);
         const m = modelsConfig.models[idx];
-        if (m) keepModels.push(m);
+        if (m) {
+          // 应用用户修改的上下文长度（避免只改了预览没落盘）
+          const ov = tokenOverrides[m.id];
+          keepModels.push(ov ? { ...m, maxInputTokens: ov.input, maxOutputTokens: ov.output } : m);
+        }
       } else if (item.provider_id) {
-        newProviderIds.push(item.provider_id);
+        // 新增 provider 的单个模型项：按勾选构造独立 entry，不再依赖后端展开
+        const p = providers.find((pr) => pr.id === item.provider_id);
+        if (p) {
+          const ov = tokenOverrides[item.model_id];
+          keepModels.push({
+            id: item.model_id,
+            name: item.display_name,
+            vendor: p.name,
+            apiKey: p.api_key,
+            maxInputTokens: ov?.input ?? 128000,
+            maxOutputTokens: ov?.output ?? 4096,
+            url: `${p.api_base_url.replace(/\/$/, '')}/chat/completions`,
+            supportsToolCall: true,
+            supportsImages: false,
+          });
+        }
       }
     }
 
-    // 允许保存空配置（移除所有模型）
+    // 允许保存空配置（移除所有模型）；providerIds 恒为空，模型由 customModels 决定
 
     setRegistering(true);
     try {
       const result = await invoke<CodeBuddyModelsConfig>('apply_codebuddy_model_config', {
         customModels: keepModels,
-        providerIds: newProviderIds,
+        providerIds: [],
       });
       setModelsConfig(result);
       await loadData();
@@ -315,6 +362,7 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
             ) : (
               <div className="provider-select-list">
                 {groupedModelList.map((group) => {
+                  const isExpanded = expandedGroups.has(group.groupKey);
                   const selectedCount = group.items.filter((item) =>
                     selectedKeys.has(item.key),
                   ).length;
@@ -324,51 +372,107 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
                     <div key={group.groupKey} className="provider-group">
                       <div
                         className="provider-group-header"
-                        onClick={() => toggleGroup(group.groupKey)}
+                        onClick={() => toggleGroupExpand(group.groupKey)}
                       >
                         <input
                           type="checkbox"
                           checked={allSelected}
-                          onChange={() => toggleGroup(group.groupKey)}
+                          onChange={() => toggleGroupSelect(group.groupKey)}
                           onClick={(e) => e.stopPropagation()}
                         />
+                        <span className="provider-group-toggle">
+                          {isExpanded ? '▼' : '▶'}
+                        </span>
                         <span className="provider-group-title">{group.groupTitle}</span>
                         <span className="provider-group-count">
                           {selectedCount}/{group.items.length}
                         </span>
                       </div>
-                      <div className="provider-group-models">
-                        {group.items.map((item) => (
-                          <label
-                            key={item.key}
-                            className="provider-select-item"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedKeys.has(item.key)}
-                              onChange={() => toggleSelect(item.key)}
-                            />
-                            <div className="provider-select-info">
-                              <span className="provider-select-name">
-                                {item.display_name}
-                              </span>
-                              <span className="provider-select-model">
-                                {item.model_id}
-                              </span>
-                            </div>
-                            {item.source === 'existing' && (
-                              <span className="provider-source-badge">
-                                已注册
-                              </span>
-                            )}
-                            {item.source === 'provider' && (
-                              <span className="provider-source-badge provider-source-new">
-                                新增
-                              </span>
-                            )}
-                          </label>
-                        ))}
-                      </div>
+                      {isExpanded && (
+                        <div className="provider-group-models">
+                          {group.items.map((item) => {
+                            // existing 模型从原始配置读取 token 值
+                            const existingModel = item.source === 'existing'
+                              ? modelsConfig.models[parseInt(item.key.replace('existing:', ''), 10)]
+                              : undefined;
+                            const currentInput = tokenOverrides[item.model_id]?.input
+                              ?? existingModel?.maxInputTokens
+                              ?? 128000;
+                            const currentOutput = tokenOverrides[item.model_id]?.output
+                              ?? existingModel?.maxOutputTokens
+                              ?? 4096;
+
+                            return (
+                              <label
+                                key={item.key}
+                                className="provider-select-item"
+                              >
+                                <input
+                                  type="checkbox"
+                                  checked={selectedKeys.has(item.key)}
+                                  onChange={() => toggleSelect(item.key)}
+                                />
+                                <div className="provider-select-info">
+                                  <span className="provider-select-name">
+                                    {item.display_name}
+                                  </span>
+                                  <span className="provider-select-model">
+                                    {item.model_id}
+                                  </span>
+                                </div>
+                                <div className="kimi-context-size-input">
+                                  <label className="kimi-context-label">输入:</label>
+                                  <input
+                                    type="number"
+                                    className="kimi-context-input"
+                                    value={currentInput}
+                                    onChange={(e) => {
+                                      const value = parseInt(e.target.value) || 128000;
+                                      setTokenOverrides((prev) => ({
+                                        ...prev,
+                                        [item.model_id]: {
+                                          input: value,
+                                          output: prev[item.model_id]?.output ?? currentOutput,
+                                        },
+                                      }));
+                                    }}
+                                    min={1}
+                                    title="最大输入 tokens"
+                                  />
+                                  <label className="kimi-context-label">输出:</label>
+                                  <input
+                                    type="number"
+                                    className="kimi-context-input"
+                                    value={currentOutput}
+                                    onChange={(e) => {
+                                      const value = parseInt(e.target.value) || 4096;
+                                      setTokenOverrides((prev) => ({
+                                        ...prev,
+                                        [item.model_id]: {
+                                          input: prev[item.model_id]?.input ?? currentInput,
+                                          output: value,
+                                        },
+                                      }));
+                                    }}
+                                    min={1}
+                                    title="最大输出 tokens"
+                                  />
+                                </div>
+                                {item.source === 'existing' && (
+                                  <span className="provider-source-badge">
+                                    已注册
+                                  </span>
+                                )}
+                                {item.source === 'provider' && (
+                                  <span className="provider-source-badge provider-source-new">
+                                    新增
+                                  </span>
+                                )}
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
                   );
                 })}

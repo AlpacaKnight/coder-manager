@@ -5,7 +5,7 @@ mod updater;
 mod version_check;
 
 use cli_tools::{CliTool, EnvCheck};
-use config::{AppConfig, Provider, QwenModelEntry, KimiModelEntry, KimiSettings, OpenCodeSettings};
+use config::{AppConfig, Provider, QwenModelEntry, KimiModelEntry};
 use std::process::Command;
 
 const GITHUB_HOMEPAGE: &str = "https://github.com/AlpacaKnight/coder-manager";
@@ -463,6 +463,7 @@ fn open_opencode_settings_file() -> Result<(), String> {
 
 #[tauri::command]
 fn apply_opencode_model_config(
+    kept_providers: std::collections::HashMap<String, config::OpenCodeProviderEntry>,
     provider_ids: Vec<String>,
 ) -> Result<serde_json::Value, String> {
     let app_config = AppConfig::load();
@@ -474,7 +475,7 @@ fn apply_opencode_model_config(
         .collect();
 
     let mut settings = config::read_opencode_settings()?;
-    config::apply_opencode_model_config(&mut settings, &providers);
+    config::apply_opencode_model_config(&mut settings, kept_providers, &providers);
     config::write_opencode_settings(&settings)?;
     serde_json::to_value(&settings).map_err(|e| e.to_string())
 }

@@ -41,6 +41,7 @@ function App() {
   const [showCodeBuddyModelConfig, setShowCodeBuddyModelConfig] = useState(false);
   const [showProviderMgmt, setShowProviderMgmt] = useState(false);
   const [previousPage, setPreviousPage] = useState<'home' | 'model-config' | 'kimi-model-config' | 'opencode-model-config' | 'codebuddy-model-config'>('home');
+  const [providerMgmtReturnKey, setProviderMgmtReturnKey] = useState(0);
   const [isChecking, setIsChecking] = useState(false);
   const [updatingTools, setUpdatingTools] = useState<Record<string, boolean>>({});
   const [toolActions, setToolActions] = useState<Record<string, ToolAction>>({});
@@ -493,6 +494,7 @@ function App() {
           <ProviderManagement
             onClose={() => {
               setShowProviderMgmt(false);
+              setProviderMgmtReturnKey((k) => k + 1);
               if (previousPage === 'model-config') setShowModelConfig(true);
               if (previousPage === 'kimi-model-config') setShowKimiModelConfig(true);
               if (previousPage === 'opencode-model-config') setShowOpenCodeModelConfig(true);
@@ -506,6 +508,7 @@ function App() {
           />
         ) : showOpenCodeModelConfig ? (
           <OpenCodeModelConfig
+            key={`opencode-${providerMgmtReturnKey}`}
             onClose={() => setShowOpenCodeModelConfig(false)}
             onOpenProviderMgmt={() => { setPreviousPage('opencode-model-config'); setShowProviderMgmt(true); setShowOpenCodeModelConfig(false); }}
           />

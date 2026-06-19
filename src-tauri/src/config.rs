@@ -465,8 +465,18 @@ pub fn open_opencode_config_file() -> Result<(), String> {
 
 pub fn apply_opencode_model_config(
     settings: &mut OpenCodeSettings,
+    kept_providers: std::collections::HashMap<String, OpenCodeProviderEntry>,
     providers: &[Provider],
 ) {
+    // 先清空，再按前端传入的选中集合重建（让模型级/Provider 级删除真正生效）
+    settings.provider.clear();
+
+    // 写入用户勾选保留的 existing provider（其 models map 已被前端精简为只含勾选模型）
+    for (key, entry) in kept_providers {
+        settings.provider.insert(key, entry);
+    }
+
+    // 将新增 Provider 转换为 OpenCode 配置格式并添加
     for p in providers {
         let npm = match p.provider_type.as_str() {
             "anthropic" => "@ai-sdk/anthropic",
@@ -499,7 +509,10 @@ pub fn apply_kimi_model_config(
     custom_models: Vec<KimiModelEntry>,
     providers: &[Provider],
 ) {
-    // 添加自定义模型
+    // 先清空，再按前端传入的选中集合重建（让模型级删除真正生效）
+    settings.models.clear();
+
+    // 保留用户勾选的自定义模型
     for m in custom_models {
         let key = m.model.clone();
         settings.models.insert(key, m);
@@ -537,11 +550,19 @@ pub fn apply_kimi_model_config(
         }
     }
 
-    // 设置默认模型（如果尚未设置）
-    if settings.default_model.is_none() || !settings.models.contains_key(settings.default_model.as_deref().unwrap_or("")) {
-        if let Some(first_key) = settings.models.keys().next() {
-            settings.default_model = Some(first_key.clone());
-        }
+    // 清理已无模型引用的孤立 provider（删除干净）
+    settings
+        .providers
+        .retain(|key, _| settings.models.values().any(|m| m.provider == *key));
+
+    // 修正默认模型：若指向的 model 已不存在，回退到第一个
+    if settings
+        .default_model
+        .as_deref()
+        .map(|d| !settings.models.contains_key(d))
+        .unwrap_or(true)
+    {
+        settings.default_model = settings.models.keys().next().cloned();
     }
 }
 
