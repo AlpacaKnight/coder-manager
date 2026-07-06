@@ -100,10 +100,13 @@ npm run tauri dev
 npm run tauri build
 ```
 
-构建后的文件位于：
-- Windows: `src-tauri/target/release/bundle/msi/`
-- macOS: `src-tauri/target/release/bundle/macos/`
-- Linux: `src-tauri/target/release/bundle/`
+构建完成后，安装包会自动整理到 `release/` 目录：
+- 安装版：`release/windows/` (.msi, .exe)
+- 绿色免安装版：`release/portable/windows/` (app.exe)
+- macOS: `release/macos/` (.dmg, .app)
+- Linux: `release/linux/` (.AppImage, .deb, .rpm)
+
+详细说明请查看 [BUILD.md](BUILD.md)
 
 ### 仅构建前端
 
@@ -133,7 +136,16 @@ coder-manager/
 │   ├── icons/             # 应用图标
 │   ├── build.rs           # 构建脚本
 │   └── tauri.conf.json    # Tauri 配置
-└── dist/                  # 构建输出
+├── scripts/                # 构建脚本
+│   ├── build.ps1          # Windows 构建脚本
+│   └── build.sh           # Linux/macOS 构建脚本
+├── release/                # 构建产物输出目录
+│   ├── windows/           # Windows 安装包
+│   ├── macos/             # macOS 安装包
+│   ├── linux/             # Linux 安装包
+│   └── portable/          # 绿色免安装版本
+├── .github/workflows/      # GitHub Actions CI/CD
+└── dist/                  # 前端构建输出
 ```
 
 ### 可用的 npm 脚本
@@ -146,6 +158,19 @@ coder-manager/
 | `npm run preview` | 预览构建后的前端 |
 | `npm run tauri dev` | 启动 Tauri 开发模式 |
 | `npm run tauri build` | 构建生产版本的应用 |
+| `npm run build:current` | 构建当前平台（等同于 tauri build） |
+
+### 多平台打包
+
+```bash
+# Windows
+.\scripts\build.ps1
+
+# Linux/macOS
+./scripts/build.sh
+```
+
+详细说明请查看 [BUILD.md](BUILD.md)
 
 ## 故障排除
 

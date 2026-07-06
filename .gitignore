@@ -7,10 +7,24 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
+# Dependencies
 node_modules
+.pnp
+.pnp.js
+
+# Build outputs
 dist
 dist-ssr
+build
 *.local
+
+# Environment variables
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
 
 # Editor directories and files
 .vscode/*
@@ -22,6 +36,9 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+*.swp
+*.swo
+*~
 
 # Rust / Tauri
 src-tauri/target
@@ -29,10 +46,22 @@ src-tauri/**/*.pdb
 src-tauri/**/*.dll
 src-tauri/**/*.exe
 rustup-init.exe
+Cargo.lock
 
 # Build artifacts
 *.msi
+*.msix
+*.appx
+*.appxbundle
 *.dmg
 *.app
 *.deb
+*.rpm
 *.AppImage
+*.snap
+release
+
+# Debug files
+*.pid
+*.seed
+*.pid.lock

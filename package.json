@@ -10,7 +10,12 @@
     "preview": "vite preview",
     "tauri": "tauri",
     "tauri dev": "tauri dev",
-    "tauri build": "tauri build"
+    "tauri build": "tauri build",
+    "build:current": "tauri build",
+    "build:windows": "tauri build --target x86_64-pc-windows-msvc",
+    "build:macos": "tauri build --target universal-apple-darwin",
+    "build:linux": "tauri build --target x86_64-unknown-linux-gnu",
+    "build:all": "echo '请使用 GitHub Actions 构建所有平台，或在各平台执行 npm run build:current'"
   },
   "dependencies": {
     "@tauri-apps/api": "^2.11.0",
