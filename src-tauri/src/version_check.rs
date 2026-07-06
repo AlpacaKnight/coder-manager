@@ -5,6 +5,12 @@ use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 const VERSION_QUERY_TIMEOUT: Duration = Duration::from_secs(8);
 
 pub fn check_for_updates(tools: &mut [CliTool]) {
@@ -164,9 +170,19 @@ fn run_command_with_timeout(
     #[cfg(not(target_os = "windows"))]
     let executable = program;
 
-    let mut child = Command::new(executable)        .args(args)
+    #[cfg(target_os = "windows")]
+    let mut cmd = Command::new(executable);
+    #[cfg(not(target_os = "windows"))]
+    let mut cmd = Command::new(executable);
+
+    cmd.args(args)
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+
+    #[cfg(target_os = "windows")]
+    cmd.creation_flags(CREATE_NO_WINDOW);
+
+    let mut child = cmd
         .spawn()
         .map_err(|e| format!("Failed to start {}: {}", program, e))?;
 

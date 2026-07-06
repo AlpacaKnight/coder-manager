@@ -2,10 +2,23 @@ use super::cli_tools::{CliTool, CliToolDefinition, LatestVersionSource};
 use crate::cli_tools::CliToolsRegistry;
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 fn execute_command(cmd: &str, tool_name: &str, operation: &str) -> Result<String, String> {
-    let output = if cfg!(target_os = "windows") {
-        Command::new("cmd").arg("/c").arg(cmd).output()
-    } else {
+    #[cfg(target_os = "windows")]
+    let output = {
+        let mut cmd_obj = Command::new("cmd");
+        cmd_obj.arg("/c").arg(cmd);
+        cmd_obj.creation_flags(CREATE_NO_WINDOW);
+        cmd_obj.output()
+    };
+
+    #[cfg(not(target_os = "windows"))]
+    let output = {
         // 对于包含特殊字符（管道、重定向等）的命令，需要通过 shell 执行
         if cmd.contains('|') || cmd.contains('>') || cmd.contains('<') || cmd.contains(';') || cmd.contains('&') {
             Command::new("bash").arg("-c").arg(cmd).output()
@@ -13,8 +26,9 @@ fn execute_command(cmd: &str, tool_name: &str, operation: &str) -> Result<String
             let (program, args) = split_command(cmd);
             Command::new(program).args(&args).output()
         }
-    }
-    .map_err(|e| format!("Failed to execute {}: {}", operation, e))?;
+    };
+
+    let output = output.map_err(|e| format!("Failed to execute {}: {}", operation, e))?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).to_string())

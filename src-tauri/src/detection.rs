@@ -9,6 +9,12 @@ use std::process::{Command, Output, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 const SHELL_COMMAND_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub fn check_environment() -> EnvCheck {
@@ -29,6 +35,7 @@ fn check_command_exists(cmd: &str) -> bool {
     {
         let output = Command::new("cmd")
             .args(&["/C", &format!("where {}", cmd)])
+            .creation_flags(CREATE_NO_WINDOW)
             .output();
 
         match output {
@@ -178,7 +185,11 @@ fn non_empty_line(line: &str) -> Option<String> {
 fn run_command(cmd_str: &str) -> Option<std::process::Output> {
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd").args(&["/C", cmd_str]).output().ok()
+        Command::new("cmd")
+            .args(&["/C", cmd_str])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output()
+            .ok()
     }
 
     #[cfg(not(target_os = "windows"))]
@@ -192,6 +203,7 @@ pub fn find_tool_path(name: &str) -> Option<String> {
     {
         let output = Command::new("cmd")
             .args(&["/C", &format!("where {}", name)])
+            .creation_flags(CREATE_NO_WINDOW)
             .output()
             .ok()?;
 

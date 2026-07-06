@@ -8,25 +8,43 @@ use cli_tools::{CliTool, EnvCheck};
 use config::{AppConfig, Provider, QwenModelEntry, KimiModelEntry};
 use std::process::Command;
 
+#[cfg(target_os = "windows")]
+use std::os::windows::process::CommandExt;
+
+#[cfg(target_os = "windows")]
+const CREATE_NO_WINDOW: u32 = 0x08000000;
+
 const GITHUB_HOMEPAGE: &str = "https://github.com/AlpacaKnight/coder-manager";
 
 #[tauri::command]
 fn open_github_homepage() -> Result<(), String> {
-    let mut command = if cfg!(target_os = "windows") {
-        let mut command = Command::new("cmd");
-        command.args(["/C", "start", "", GITHUB_HOMEPAGE]);
-        command
-    } else if cfg!(target_os = "macos") {
-        let mut command = Command::new("open");
-        command.arg(GITHUB_HOMEPAGE);
-        command
-    } else {
-        let mut command = Command::new("xdg-open");
-        command.arg(GITHUB_HOMEPAGE);
-        command
-    };
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .args(["/C", "start", "", GITHUB_HOMEPAGE])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
 
-    command.spawn().map(|_| ()).map_err(|e| e.to_string())
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(GITHUB_HOMEPAGE)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(GITHUB_HOMEPAGE)
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
 }
 
 #[tauri::command]
@@ -361,20 +379,32 @@ fn open_qwen_settings_file() -> Result<(), String> {
         return Err(format!("配置文件不存在: {}", path.display()));
     }
     let path_str = path.to_string_lossy().to_string();
-    let mut command = if cfg!(target_os = "windows") {
-        let mut c = Command::new("cmd");
-        c.args(["/C", "start", "", &path_str]);
-        c
-    } else if cfg!(target_os = "macos") {
-        let mut c = Command::new("open");
-        c.arg(&path_str);
-        c
-    } else {
-        let mut c = Command::new("xdg-open");
-        c.arg(&path_str);
-        c
-    };
-    command.spawn().map_err(|e| e.to_string())?;
+
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("cmd")
+            .args(["/C", "start", "", &path_str])
+            .creation_flags(CREATE_NO_WINDOW)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open")
+            .arg(&path_str)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        Command::new("xdg-open")
+            .arg(&path_str)
+            .spawn()
+            .map_err(|e| e.to_string())?;
+    }
+
     Ok(())
 }
 
