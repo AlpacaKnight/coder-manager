@@ -49,6 +49,7 @@ function App() {
   const [isInstalling] = useState(false);
   const [isEnvUpdating] = useState(false);
   const [isCheckingBackground, setIsCheckingBackground] = useState(false);
+  const [recheckingTools, setRecheckingTools] = useState<Record<string, boolean>>({});
 
   // 计算全局是否在更新（供 Header 使用避免冲突）
   const isUpdating = Object.values(updatingTools).some(Boolean);
@@ -245,6 +246,36 @@ function App() {
       console.error('Failed to check updates:', error);
     }
     setIsChecking(false);
+  };
+
+  const handleRecheck = async (name: string) => {
+    const tool = tools.find((t) => t.name === name);
+    if (!tool) return;
+
+    setRecheckingTools((prev) => ({ ...prev, [name]: true }));
+    try {
+      if (tool.current_version) {
+        // 已安装的工具：检查最新版本
+        await checkSingleToolUpdate(name, tool.current_version);
+      } else {
+        // 未安装的工具：重新检测是否已安装
+        const quickData = await invoke<CliTool[]>('get_tools_quick');
+        setTools(quickData);
+        const updatedTool = quickData.find((t) => t.name === name);
+        if (updatedTool) {
+          setSelectedTool(updatedTool);
+          // 如果检测到已安装，再检查最新版本
+          if (updatedTool.current_version) {
+            await checkSingleToolUpdate(name, updatedTool.current_version);
+          }
+        }
+      }
+      await persistLastCheckTime();
+    } catch (error) {
+      console.error('Failed to recheck:', error);
+    } finally {
+      setRecheckingTools((prev) => ({ ...prev, [name]: false }));
+    }
   };
 
   const handleRefresh = async () => {
@@ -537,11 +568,13 @@ function App() {
               onInstall={handleInstall}
               onUninstall={handleUninstall}
               onIgnore={handleIgnore}
+              onRecheck={handleRecheck}
               onOpenModelConfig={() => { setPreviousPage('home'); setShowModelConfig(true); }}
               onOpenKimiModelConfig={() => { setPreviousPage('home'); setShowKimiModelConfig(true); }}
               onOpenOpenCodeModelConfig={() => { setPreviousPage('home'); setShowOpenCodeModelConfig(true); }}
               onOpenCodeBuddyModelConfig={() => { setPreviousPage('home'); setShowCodeBuddyModelConfig(true); }}
               isUpdating={selectedTool ? !!updatingTools[selectedTool.name] : false}
+              isRechecking={selectedTool ? !!recheckingTools[selectedTool.name] : false}
               activeAction={selectedTool ? toolActions[selectedTool.name] ?? null : null}
             />
           </>

@@ -8,11 +8,13 @@ interface ToolDetailProps {
   onInstall?: (name: string) => void;
   onUninstall?: (name: string) => void;
   onIgnore: (name: string) => void;
+  onRecheck?: (name: string) => void;
   onOpenModelConfig?: () => void;
   onOpenKimiModelConfig?: () => void;
   onOpenOpenCodeModelConfig?: () => void;
   onOpenCodeBuddyModelConfig?: () => void;
   isUpdating: boolean;
+  isRechecking?: boolean;
   activeAction?: 'update' | 'install' | 'uninstall' | null;
 }
 
@@ -36,7 +38,7 @@ const statusClasses: Record<string, string> = {
   Checking: 'checking',
 };
 
-export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, onOpenModelConfig, onOpenKimiModelConfig, onOpenOpenCodeModelConfig, onOpenCodeBuddyModelConfig, isUpdating, activeAction }: ToolDetailProps) {
+export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, onRecheck, onOpenModelConfig, onOpenKimiModelConfig, onOpenOpenCodeModelConfig, onOpenCodeBuddyModelConfig, isUpdating, isRechecking, activeAction }: ToolDetailProps) {
   const [updateCommand, setUpdateCommand] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,13 +56,24 @@ export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, o
   const currentAction = activeAction ?? null;
   const isBusy = isUpdating || currentAction !== null;
   const isInstalled = tool.status !== 'NotInstalled' && Boolean(tool.current_version);
+  const canRecheck = (tool.status === 'Error' || tool.status === 'UpToDate' || tool.status === 'NotInstalled') && !isRechecking;
+
+  const handleStatusClick = () => {
+    if (canRecheck && onRecheck) {
+      onRecheck(tool.name);
+    }
+  };
 
   return (
     <div className="tool-detail">
       <div className="detail-header">
         <h2>{tool.display_name}</h2>
-        <span className={`status-badge status-${statusClasses[tool.status]}`}>
-          {statusLabels[tool.status]}
+        <span
+          className={`status-badge status-${statusClasses[tool.status]}${canRecheck ? ' clickable' : ''}`}
+          onClick={handleStatusClick}
+          title={canRecheck ? '点击重新检查' : undefined}
+        >
+          {isRechecking ? '检查中...' : statusLabels[tool.status]}
         </span>
       </div>
       
