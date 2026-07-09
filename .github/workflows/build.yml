@@ -25,7 +25,7 @@ jobs:
           - platform: windows-latest
             target: windows
             args: ''
-          - platform: macos-15-intel
+          - platform: macos-15
             target: macos
             args: '--target universal-apple-darwin'
           - platform: ubuntu-22.04
