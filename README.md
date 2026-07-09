@@ -97,7 +97,7 @@ npm run tauri dev
 ### 构建生产版本
 
 ```bash
-npm run tauri build
+npm run build:current
 ```
 
 构建完成后，安装包会自动整理到 `release/` 目录：
@@ -129,7 +129,7 @@ coder-manager/
 ├── src/                      # 前端源代码
 │   ├── components/          # React 组件
 │   ├── pages/              # 页面组件
-│   ├── api/                # Tauri API 调用
+│   ├── hooks/               # 自定义 React Hooks
 │   └── types/              # TypeScript 类型
 ├── src-tauri/              # Rust 后端
 │   ├── src/               # Rust 源代码
@@ -158,7 +158,7 @@ coder-manager/
 | `npm run preview` | 预览构建后的前端 |
 | `npm run tauri dev` | 启动 Tauri 开发模式 |
 | `npm run tauri build` | 构建生产版本的应用 |
-| `npm run build:current` | 构建当前平台（等同于 tauri build） |
+| `npm run build:current` | 构建当前平台（清理旧产物 + 构建 + 收集到 release/） |
 
 ### 多平台打包
 
@@ -201,7 +201,7 @@ coder-manager/
 
 1. **依赖缺失**
    - 安装 `webkit2gtk` 和 `openssl` 开发包
-   - Ubuntu/Debian: `sudo apt install libwebkit2gtk-4.0-dev libssl-dev`
+   - Ubuntu/Debian: `sudo apt install libwebkit2gtk-4.1-dev libssl-dev`
 
 2. **权限问题**
    - 确保当前用户有权访问 `/tmp` 目录
