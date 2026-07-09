@@ -1,5 +1,7 @@
 use super::cli_tools::{CliTool, CliToolDefinition, LatestVersionSource};
 use crate::cli_tools::CliToolsRegistry;
+#[cfg(not(target_os = "windows"))]
+use crate::detection;
 use std::process::Command;
 
 #[cfg(target_os = "windows")]
@@ -20,11 +22,23 @@ fn execute_command(cmd: &str, tool_name: &str, operation: &str) -> Result<String
     #[cfg(not(target_os = "windows"))]
     let output = {
         // 对于包含特殊字符（管道、重定向等）的命令，需要通过 shell 执行
-        if cmd.contains('|') || cmd.contains('>') || cmd.contains('<') || cmd.contains(';') || cmd.contains('&') {
-            Command::new("bash").arg("-c").arg(cmd).output()
+        if cmd.contains('|')
+            || cmd.contains('>')
+            || cmd.contains('<')
+            || cmd.contains(';')
+            || cmd.contains('&')
+        {
+            Command::new("bash")
+                .arg("-c")
+                .arg(cmd)
+                .env("PATH", detection::enriched_path())
+                .output()
         } else {
             let (program, args) = split_command(cmd);
-            Command::new(program).args(&args).output()
+            Command::new(program)
+                .args(&args)
+                .env("PATH", detection::enriched_path())
+                .output()
         }
     };
 

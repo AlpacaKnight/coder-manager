@@ -56,7 +56,7 @@ export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, o
   const currentAction = activeAction ?? null;
   const isBusy = isUpdating || currentAction !== null;
   const isInstalled = tool.status !== 'NotInstalled' && Boolean(tool.current_version);
-  const canRecheck = (tool.status === 'Error' || tool.status === 'UpToDate' || tool.status === 'NotInstalled') && !isRechecking;
+  const canRecheck = !isRechecking;
 
   const handleStatusClick = () => {
     if (canRecheck && onRecheck) {

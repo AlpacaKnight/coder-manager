@@ -1,4 +1,6 @@
 use super::cli_tools::{CliTool, CliToolsRegistry, LatestVersionSource, ToolStatus};
+#[cfg(not(target_os = "windows"))]
+use super::detection;
 use regex::Regex;
 use std::collections::HashMap;
 use std::process::{Command, Output, Stdio};
@@ -105,12 +107,8 @@ pub fn get_latest_version(source: &LatestVersionSource) -> Result<String, String
 }
 
 fn get_npm_latest_version(package: &str) -> Result<String, String> {
-    let output = run_command_with_timeout(
-        "npm",
-        &["view", package, "version"],
-
-        VERSION_QUERY_TIMEOUT,
-    )?;
+    let output =
+        run_command_with_timeout("npm", &["view", package, "version"], VERSION_QUERY_TIMEOUT)?;
 
     if output.status.success() {
         Ok(String::from_utf8_lossy(&output.stdout).trim().to_string())
@@ -175,9 +173,10 @@ fn run_command_with_timeout(
     #[cfg(not(target_os = "windows"))]
     let mut cmd = Command::new(executable);
 
-    cmd.args(args)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
+    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
+
+    #[cfg(not(target_os = "windows"))]
+    cmd.env("PATH", detection::enriched_path());
 
     #[cfg(target_os = "windows")]
     cmd.creation_flags(CREATE_NO_WINDOW);

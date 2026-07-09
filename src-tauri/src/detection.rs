@@ -90,7 +90,10 @@ fn detect_tool(definition: &CliToolDefinition, ignored: &[String]) -> CliTool {
     let is_ignored = ignored.contains(&definition.name.to_lowercase());
 
     // 第一步：检查命令是否存在（优先使用 command_name，否则使用 name）
-    let check_name = definition.command_name.as_deref().unwrap_or(&definition.name);
+    let check_name = definition
+        .command_name
+        .as_deref()
+        .unwrap_or(&definition.name);
     let is_installed = check_command_exists(check_name);
 
     if is_installed {
@@ -269,7 +272,7 @@ fn run_login_shell_command(cmd: &str) -> std::io::Result<Output> {
 }
 
 #[cfg(not(target_os = "windows"))]
-fn enriched_path() -> String {
+pub(crate) fn enriched_path() -> String {
     let mut paths = Vec::new();
     let mut seen = HashSet::new();
 
