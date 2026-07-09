@@ -25,6 +25,6 @@ tauri = { version = "2.11.2", features = [] }
 tauri-plugin-log = "2"
 regex = "1.10"
 dirs = "5"
-chrono = "0.4"
 rayon = "1.10"
 toml = "0.8"
+shlex = "1.3"

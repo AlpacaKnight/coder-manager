@@ -7,6 +7,14 @@ interface CodeBuddyModelConfigProps {
   onOpenProviderMgmt: () => void;
 }
 
+/** 根据 Provider 类型构造 API 端点 URL */
+const getEndpoint = (providerType: string, baseUrl: string): string => {
+  const base = baseUrl.replace(/\/$/, '');
+  return providerType === 'anthropic'
+    ? `${base}/v1/messages`
+    : `${base}/chat/completions`;
+};
+
 export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyModelConfigProps) {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [modelsConfig, setModelsConfig] = useState<CodeBuddyModelsConfig>({ models: [] });
@@ -34,6 +42,7 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
       }
       setSelectedKeys(keys);
       setDropdownAddedKeys(new Set());
+      setTokenOverrides({});
     } catch (err) {
       console.error('Failed to load data:', err);
       setModelsConfig({ models: [] });
@@ -43,11 +52,14 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const init = async () => {
       await loadData();
+      if (cancelled) return;
       setLoading(false);
     };
     void init();
+    return () => { cancelled = true; };
   }, [loadData]);
 
   const dropdownOptions = useMemo(() => {
@@ -128,7 +140,7 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
     for (const [pid, items] of providerGroups) {
       groups.push({
         groupKey: `provider:${pid}`,
-        groupTitle: items[0]?.display_name || pid,
+        groupTitle: items[0]?.vendor || pid,
         items,
       });
     }
@@ -189,7 +201,7 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
             apiKey: p.api_key,
             maxInputTokens: ov?.input ?? 128000,
             maxOutputTokens: ov?.output ?? 4096,
-            url: `${p.api_base_url.replace(/\/$/, '')}/chat/completions`,
+            url: getEndpoint(p.provider_type, p.api_base_url),
             supportsToolCall: true,
             supportsImages: false,
           });
@@ -247,6 +259,7 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
       setModelsConfig({ models: [] });
       setSelectedKeys(new Set());
       setDropdownAddedKeys(new Set());
+      setTokenOverrides({});
       alert('配置文件已删除！');
     } catch (err) {
       alert(`删除失败: ${err}`);
@@ -279,7 +292,7 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
             apiKey: p.api_key,
             maxInputTokens: ov?.input ?? 128000,
             maxOutputTokens: ov?.output ?? 4096,
-            url: `${p.api_base_url.replace(/\/$/, '')}/chat/completions`,
+            url: getEndpoint(p.provider_type, p.api_base_url),
             supportsToolCall: true,
             supportsImages: false,
           });
@@ -427,7 +440,10 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
                                     className="kimi-context-input"
                                     value={currentInput}
                                     onChange={(e) => {
-                                      const value = parseInt(e.target.value) || 128000;
+                                      const raw = e.target.value;
+                                      if (raw === '') return; // 允许清空输入框，不立即覆盖
+                                      const value = parseInt(raw, 10);
+                                      if (Number.isNaN(value) || value < 1) return;
                                       setTokenOverrides((prev) => ({
                                         ...prev,
                                         [item.model_id]: {
@@ -435,6 +451,19 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
                                           output: prev[item.model_id]?.output ?? currentOutput,
                                         },
                                       }));
+                                    }}
+                                    onBlur={(e) => {
+                                      // 失焦时若为空或非法，回退到默认值
+                                      const value = parseInt(e.target.value, 10);
+                                      if (Number.isNaN(value) || value < 1) {
+                                        setTokenOverrides((prev) => ({
+                                          ...prev,
+                                          [item.model_id]: {
+                                            input: existingModel?.maxInputTokens ?? 128000,
+                                            output: prev[item.model_id]?.output ?? currentOutput,
+                                          },
+                                        }));
+                                      }
                                     }}
                                     min={1}
                                     title="最大输入 tokens"
@@ -445,7 +474,10 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
                                     className="kimi-context-input"
                                     value={currentOutput}
                                     onChange={(e) => {
-                                      const value = parseInt(e.target.value) || 4096;
+                                      const raw = e.target.value;
+                                      if (raw === '') return; // 允许清空输入框，不立即覆盖
+                                      const value = parseInt(raw, 10);
+                                      if (Number.isNaN(value) || value < 1) return;
                                       setTokenOverrides((prev) => ({
                                         ...prev,
                                         [item.model_id]: {
@@ -453,6 +485,19 @@ export function CodeBuddyModelConfig({ onClose, onOpenProviderMgmt }: CodeBuddyM
                                           output: value,
                                         },
                                       }));
+                                    }}
+                                    onBlur={(e) => {
+                                      // 失焦时若为空或非法，回退到默认值
+                                      const value = parseInt(e.target.value, 10);
+                                      if (Number.isNaN(value) || value < 1) {
+                                        setTokenOverrides((prev) => ({
+                                          ...prev,
+                                          [item.model_id]: {
+                                            input: prev[item.model_id]?.input ?? currentInput,
+                                            output: existingModel?.maxOutputTokens ?? 4096,
+                                          },
+                                        }));
+                                      }
                                     }}
                                     min={1}
                                     title="最大输出 tokens"

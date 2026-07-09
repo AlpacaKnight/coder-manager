@@ -47,7 +47,7 @@ fn sort_tools_by_config(tools: &mut Vec<CliTool>, tool_order: &[String]) {
 }
 ```
 
-Apply `sort_tools_by_config(&mut tools, &config.tool_order)` in `get_installed_tools`, `refresh_tools`, and `check_for_updates`.
+Apply `sort_tools_by_config(&mut tools, &config.tool_order)` in `get_tools_quick`, `get_tool_names`, and `check_for_updates`.
 
 Add `save_tool_order` command:
 
@@ -108,13 +108,19 @@ const handleClick = (tool: CliTool) => {
 ```typescript
 const handleReorder = async (order: string[]) => {
   await invoke('save_tool_order', { order });
-  // Use get_tools_quick (fast, no network) instead of refresh_tools
-  const quickData = await invoke<CliTool[]>('get_tools_quick');
-  setTools(quickData);
+  // 重排现有 tools，避免丢失已查到的网络版本信息
+  const orderMap = new Map(order.map((name, idx) => [name, idx]));
+  setTools((prev) =>
+    [...prev].sort((a, b) => {
+      const idxA = orderMap.get(a.name) ?? Number.MAX_SAFE_INTEGER;
+      const idxB = orderMap.get(b.name) ?? Number.MAX_SAFE_INTEGER;
+      return idxA - idxB;
+    }),
+  );
 };
 ```
 
-**Note**: Use `get_tools_quick` here instead of `refresh_tools` — `refresh_tools` runs `check_for_updates` which queries npm/crates.io for every tool (slow). `get_tools_quick` only reads local state and returns immediately.
+**Note**: Reorder applies sorting to the existing `tools` array in-place rather than re-fetching from backend — this preserves already-fetched `latest_version` / `update_available` fields that would be lost by re-calling `get_tools_quick`.
 
 **4. `App.css`** — Drag styles:
 
@@ -128,6 +134,6 @@ const handleReorder = async (order: string[]) => {
 
 ### Key Design Decisions
 
-- **Server-side sorting**: Order is applied in Rust on every `get_installed_tools` call, so new/uninstalled tools (not in `tool_order`) appear at the end via `usize::MAX` fallback
-- **Immediate refresh**: After saving order, `refresh_tools` is called to re-sort the displayed list
+- **Server-side sorting**: Order is applied in Rust on every `get_tools_quick` call, so new/uninstalled tools (not in `tool_order`) appear at the end via `usize::MAX` fallback
+- **Immediate refresh**: After saving order, the existing `tools` array is re-sorted in-place on the frontend (no backend re-fetch needed)
 - **No external drag library**: Uses native HTML5 DnD API (no `react-beautiful-dnd` or `@dnd-kit` dependency)

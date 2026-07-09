@@ -21,12 +21,17 @@ export function useDragReorder<T extends object>({ items, onReorder }: UseDragRe
   const dragIndexRef = useRef<number | null>(null);
   const dragOverIndexRef = useRef<number | null>(null);
   const itemsRef = useRef<T[]>(items);
+  const onReorderRef = useRef(onReorder);
   const clickSuppressedRef = useRef(false);
   const isDraggingRef = useRef(false);
 
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
+
+  useEffect(() => {
+    onReorderRef.current = onReorder;
+  }, [onReorder]);
 
   const findIndexFromPointer = useCallback((event: PointerEvent): number | null => {
     const container = containerRef.current;
@@ -39,6 +44,14 @@ export function useDragReorder<T extends object>({ items, onReorder }: UseDragRe
       const rect = children[i].getBoundingClientRect();
       if (y >= rect.top && y <= rect.bottom) {
         return i;
+      }
+    }
+
+    // 指针位于最后一项底部之下时，返回末尾位置（允许拖到列表最后）
+    if (children.length > 0) {
+      const lastRect = children[children.length - 1].getBoundingClientRect();
+      if (y > lastRect.bottom) {
+        return children.length - 1;
       }
     }
 
@@ -70,9 +83,9 @@ export function useDragReorder<T extends object>({ items, onReorder }: UseDragRe
       const nextItems = [...itemsRef.current];
       const [movedItem] = nextItems.splice(sourceIndex, 1);
       nextItems.splice(targetIndex, 0, movedItem);
-      onReorder(nextItems);
+      onReorderRef.current(nextItems);
     }
-  }, [onReorder]);
+  }, []);
 
   useEffect(() => {
     const handlePointerMove = (event: PointerEvent) => {
@@ -103,7 +116,12 @@ export function useDragReorder<T extends object>({ items, onReorder }: UseDragRe
     dragOverIndexRef.current = index;
     setDragIndex(index);
     setDragOverIndex(index);
-    event.currentTarget.setPointerCapture(event.pointerId);
+    // setPointerCapture 在 pointerId 无效或元素已释放指针时可能抛异常
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // 退化为依赖 window 监听（已在上方 addEventListener）
+    }
   }, []);
 
   const handleContainerClick = useCallback(() => {

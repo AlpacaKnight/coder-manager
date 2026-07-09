@@ -64,11 +64,14 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const init = async () => {
       await loadData();
+      if (cancelled) return;
       setLoading(false);
     };
     void init();
+    return () => { cancelled = true; };
   }, [loadData]);
 
   // 下拉菜单可选 Provider（仅过滤接口类型和已通过下拉添加的）
@@ -237,7 +240,11 @@ export function ModelConfig({ onClose, onOpenProviderMgmt }: ModelConfigProps) {
     }
     const mp = merged.modelProviders as Record<string, unknown>;
     mp.openai = allOpenai;
-    mp.anthropic = allAnthropic;
+    if (allAnthropic.length > 0) {
+      mp.anthropic = allAnthropic;
+    } else {
+      delete mp.anthropic;
+    }
 
     if (!merged.security || typeof merged.security !== 'object') {
       merged.security = {};

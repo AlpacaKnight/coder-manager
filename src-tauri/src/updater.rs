@@ -1,8 +1,10 @@
-use super::cli_tools::{CliTool, CliToolDefinition, LatestVersionSource};
-use crate::cli_tools::CliToolsRegistry;
+use super::cli_tools::{CliToolDefinition, LatestVersionSource};
 #[cfg(not(target_os = "windows"))]
 use crate::detection;
-use std::process::Command;
+use std::io::Read;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::{Duration, Instant};
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
@@ -10,17 +12,20 @@ use std::os::windows::process::CommandExt;
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
+/// 安装/更新/卸载命令的超时时间（5 分钟），避免网络慢或交互式命令永久阻塞
+const COMMAND_TIMEOUT: Duration = Duration::from_secs(300);
+
 fn execute_command(cmd: &str, tool_name: &str, operation: &str) -> Result<String, String> {
     #[cfg(target_os = "windows")]
-    let output = {
-        let mut cmd_obj = Command::new("cmd");
-        cmd_obj.arg("/c").arg(cmd);
-        cmd_obj.creation_flags(CREATE_NO_WINDOW);
-        cmd_obj.output()
+    let mut cmd_obj = {
+        let mut c = Command::new("cmd");
+        c.arg("/c").arg(cmd);
+        c.creation_flags(CREATE_NO_WINDOW);
+        c
     };
 
     #[cfg(not(target_os = "windows"))]
-    let output = {
+    let mut cmd_obj = {
         // 对于包含特殊字符（管道、重定向等）的命令，需要通过 shell 执行
         if cmd.contains('|')
             || cmd.contains('>')
@@ -28,26 +33,88 @@ fn execute_command(cmd: &str, tool_name: &str, operation: &str) -> Result<String
             || cmd.contains(';')
             || cmd.contains('&')
         {
-            Command::new("bash")
-                .arg("-c")
+            let mut c = Command::new("bash");
+            c.arg("-c")
                 .arg(cmd)
-                .env("PATH", detection::enriched_path())
-                .output()
+                .env("PATH", detection::enriched_path());
+            c
         } else {
-            let (program, args) = split_command(cmd);
-            Command::new(program)
-                .args(&args)
-                .env("PATH", detection::enriched_path())
-                .output()
+            // 使用 shlex 拆分命令，正确处理带空格的引号参数
+            let parts = shlex::split(cmd).unwrap_or_default();
+            if parts.is_empty() {
+                // 退化为直接执行整个字符串（让系统报错）
+                let mut c = Command::new(cmd);
+                c.env("PATH", detection::enriched_path());
+                c
+            } else {
+                let mut c = Command::new(&parts[0]);
+                c.args(&parts[1..])
+                    .env("PATH", detection::enriched_path());
+                c
+            }
         }
     };
 
-    let output = output.map_err(|e| format!("Failed to execute {}: {}", operation, e))?;
+    cmd_obj
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
 
-    if output.status.success() {
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+    let mut child = cmd_obj
+        .spawn()
+        .map_err(|e| format!("Failed to execute {}: {}", operation, e))?;
+
+    // 在单独线程读取 stdout/stderr，避免管道缓冲写满后子进程阻塞导致死锁
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let stdout_handle = thread::spawn(move || -> Vec<u8> {
+        let mut buf = Vec::new();
+        if let Some(mut s) = stdout {
+            let _ = s.read_to_end(&mut buf);
+        }
+        buf
+    });
+    let stderr_handle = thread::spawn(move || -> Vec<u8> {
+        let mut buf = Vec::new();
+        if let Some(mut s) = stderr {
+            let _ = s.read_to_end(&mut buf);
+        }
+        buf
+    });
+
+    let started = Instant::now();
+    let status = loop {
+        match child.try_wait() {
+            Ok(Some(status)) => break status,
+            Ok(None) if started.elapsed() >= COMMAND_TIMEOUT => {
+                let _ = child.kill();
+                let _ = child.wait();
+                let _ = stdout_handle.join();
+                let _ = stderr_handle.join();
+                return Err(format!(
+                    "{} timed out after {}s for '{}'",
+                    operation,
+                    COMMAND_TIMEOUT.as_secs(),
+                    tool_name
+                ));
+            }
+            Ok(None) => thread::sleep(Duration::from_millis(100)),
+            Err(e) => {
+                let _ = stdout_handle.join();
+                let _ = stderr_handle.join();
+                return Err(format!("Failed to wait for {}: {}", operation, e));
+            }
+        }
+    };
+
+    let stdout_output = stdout_handle.join().unwrap_or_default();
+    let stderr_output = stderr_handle.join().unwrap_or_default();
+
+    if status.success() {
+        Ok(String::from_utf8_lossy(&stdout_output).to_string())
     } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+        let stderr = String::from_utf8_lossy(&stderr_output).to_string();
         if stderr.is_empty() {
             Err(format!("{} failed for '{}'", operation, tool_name))
         } else {
@@ -106,42 +173,5 @@ fn get_uninstall_command(tool: &CliToolDefinition) -> Result<String, String> {
         LatestVersionSource::Npm(package) => Ok(format!("npm uninstall -g {}", package)),
         LatestVersionSource::CratesIo(crate_name) => Ok(format!("cargo uninstall {}", crate_name)),
         _ => Err(format!("Tool '{}' cannot be auto-uninstalled", tool.name)),
-    }
-}
-
-pub fn batch_update_tools(tools: Vec<CliTool>) -> Vec<(String, Result<String, String>)> {
-    tools
-        .into_iter()
-        .filter(|t| {
-            t.can_auto_update
-                && !t
-                    .update_command
-                    .as_ref()
-                    .map(|c| c.is_empty())
-                    .unwrap_or(true)
-        })
-        .map(|tool| {
-            let result = update_tool_by_name(&tool.name);
-            (tool.name, result)
-        })
-        .collect()
-}
-
-fn update_tool_by_name(name: &str) -> Result<String, String> {
-    let definitions = CliToolsRegistry::get_supported_tools();
-    let def = definitions.into_iter().find(|d| d.name == name);
-    if let Some(def) = def {
-        update_tool_by_definition(&def)
-    } else {
-        Err(format!("Tool '{}' not found", name))
-    }
-}
-
-fn split_command(cmd: &str) -> (&str, Vec<&str>) {
-    let parts: Vec<&str> = cmd.trim().split_whitespace().collect();
-    if parts.is_empty() {
-        ("", vec![])
-    } else {
-        (parts[0], parts[1..].to_vec())
     }
 }

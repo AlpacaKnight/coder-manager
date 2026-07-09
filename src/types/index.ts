@@ -89,7 +89,7 @@ export interface KimiSettings {
   models: Record<string, KimiModel>;
 }
 
-export interface KimiProviderConfig {
+interface KimiProviderConfig {
   type: string;
   base_url?: string;
   api_key?: string;
@@ -106,7 +106,7 @@ export interface KimiModelDisplay {
   provider_id?: string;
 }
 
-export interface OpenCodeProviderOptions {
+interface OpenCodeProviderOptions {
   apiKey?: string;
   baseURL?: string;
   setCacheKey?: boolean;
@@ -129,7 +129,6 @@ export interface OpenCodeProviderDisplay {
   has_api_key: boolean;
   source: 'existing' | 'provider';
   model_id?: string;
-  model_name?: string;
 }
 
 export interface CodeBuddyModel {

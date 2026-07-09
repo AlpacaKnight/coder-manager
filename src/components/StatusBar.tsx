@@ -4,7 +4,9 @@ interface StatusBarProps {
 
 export function StatusBar({ lastCheckTime }: StatusBarProps) {
   const formatTime = (timestamp: string) => {
-    const date = new Date(parseInt(timestamp) * 1000);
+    const ts = parseInt(timestamp, 10);
+    if (Number.isNaN(ts)) return '未知';
+    const date = new Date(ts * 1000);
     return date.toLocaleString();
   };
 

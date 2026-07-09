@@ -15,14 +15,14 @@ interface ProviderForm {
   models: ModelEntry[];
 }
 
-const EMPTY_FORM: ProviderForm = {
+const emptyForm = (): ProviderForm => ({
   id: '',
   name: '',
   api_base_url: '',
   api_key: '',
   provider_type: 'openai',
   models: [{ id: '', name: '' }],
-};
+});
 
 const PROVIDER_TYPE_OPTIONS: { value: ProviderType; label: string }[] = [
   { value: 'openai', label: 'OpenAI 兼容接口' },
@@ -32,10 +32,10 @@ const PROVIDER_TYPE_OPTIONS: { value: ProviderType; label: string }[] = [
 
 export function ProviderManagement({ onClose }: ProviderManagementProps) {
   const [providers, setProviders] = useState<Provider[]>([]);
-  const [form, setForm] = useState<ProviderForm>(EMPTY_FORM);
+  const [form, setForm] = useState<ProviderForm>(emptyForm);
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<ProviderForm>(EMPTY_FORM);
+  const [editForm, setEditForm] = useState<ProviderForm>(emptyForm);
   const [showAddKey, setShowAddKey] = useState(false);
   const [showEditKey, setShowEditKey] = useState(false);
 
@@ -49,11 +49,14 @@ export function ProviderManagement({ onClose }: ProviderManagementProps) {
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const init = async () => {
       await loadProviders();
+      if (cancelled) return;
       setLoading(false);
     };
     void init();
+    return () => { cancelled = true; };
   }, [loadProviders]);
 
   // 表单校验：models 至少 1 个 id 和 name 都非空的条目
@@ -88,7 +91,7 @@ export function ProviderManagement({ onClose }: ProviderManagementProps) {
     const provider = buildProvider(form);
     try {
       await invoke('create_provider', { provider });
-      setForm(EMPTY_FORM);
+      setForm(emptyForm());
       setShowAddKey(false);
       await loadProviders();
     } catch (e) {
@@ -97,6 +100,11 @@ export function ProviderManagement({ onClose }: ProviderManagementProps) {
   };
 
   const handleDeleteProvider = async (id: string) => {
+    const provider = providers.find((p) => p.id === id);
+    const displayName = provider?.name ?? id;
+    if (!window.confirm(`确定要删除 Provider ${displayName} 吗？此操作不可撤销。`)) {
+      return;
+    }
     try {
       await invoke('delete_provider', { id });
       await loadProviders();
@@ -189,7 +197,7 @@ export function ProviderManagement({ onClose }: ProviderManagementProps) {
   ) => (
     <div className="model-pair-list">
       {models.map((m, idx) => (
-        <div key={idx} className="model-pair-row">
+        <div key={`${idx}-${m.id || 'empty'}`} className="model-pair-row">
           <input
             className="model-config-input"
             placeholder="模型 ID"

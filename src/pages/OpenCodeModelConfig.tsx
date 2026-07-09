@@ -76,11 +76,14 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const init = async () => {
       await loadData();
+      if (cancelled) return;
       setLoading(false);
     };
     void init();
+    return () => { cancelled = true; };
   }, [loadData]);
 
   const dropdownOptions = useMemo(() => {
@@ -99,8 +102,7 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
       const providerType = npmToProviderType(p.npm);
       const hasApiKey = Boolean(p.options?.apiKey);
       if (p.models && Object.keys(p.models).length > 0) {
-        for (const [modelId, modelValue] of Object.entries(p.models)) {
-          const modelName = (modelValue as { name?: string })?.name || modelId;
+        for (const modelId of Object.keys(p.models)) {
           result.push({
             key: `existing:${providerKey}::${modelId}`,
             provider_id: providerKey,
@@ -108,7 +110,6 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
             has_api_key: hasApiKey,
             source: 'existing',
             model_id: modelId,
-            model_name: modelName,
           });
         }
       } else {
@@ -257,11 +258,16 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
       const p = providers.find((pr) => pr.id === item.provider_id);
       if (p) {
         const npm = providerTypeToNpm(p.provider_type);
+        const models: Record<string, unknown> = {};
+        for (const m of p.models) {
+          models[m.id] = { name: m.name };
+        }
         providerConfig[item.provider_id] = {
           npm,
           options: {
             apiKey: p.api_key,
           },
+          ...(Object.keys(models).length > 0 && { models }),
         };
       }
     }
@@ -321,14 +327,14 @@ export function OpenCodeModelConfig({ onClose, onOpenProviderMgmt }: OpenCodeMod
         }
         keptProviders[providerId] = {
           npm: p.npm,
-          options: p.options,
-          models,
+          ...(p.options && { options: p.options }),
+          ...(Object.keys(models).length > 0 && { models }),
         };
       } else {
         keptProviders[providerId] = {
           npm: p.npm,
-          options: p.options,
-          models: p.models,
+          ...(p.options && { options: p.options }),
+          ...(p.models && Object.keys(p.models).length > 0 && { models: p.models }),
         };
       }
     }

@@ -1095,6 +1095,14 @@ body {
 .model-config-select {
   appearance: auto;
   cursor: pointer;
+  /* 确保 select 及其 option 在深色主题下文字可读 */
+  background-color: #16213e;
+  color: #eaeaea;
+}
+
+.model-config-select option {
+  background-color: #16213e;
+  color: #eaeaea;
 }
 
 .provider-type-badge {

@@ -33,8 +33,9 @@ pub fn check_environment() -> EnvCheck {
 fn check_command_exists(cmd: &str) -> bool {
     #[cfg(target_os = "windows")]
     {
-        let output = Command::new("cmd")
-            .args(&["/C", &format!("where {}", cmd)])
+        // 直接调用 where.exe，以独立参数传递命令名，避免经 cmd /C 解析导致命令注入
+        let output = Command::new("where")
+            .arg(cmd)
             .creation_flags(CREATE_NO_WINDOW)
             .output();
 
@@ -204,8 +205,9 @@ fn run_command(cmd_str: &str) -> Option<std::process::Output> {
 pub fn find_tool_path(name: &str) -> Option<String> {
     #[cfg(target_os = "windows")]
     {
-        let output = Command::new("cmd")
-            .args(&["/C", &format!("where {}", name)])
+        // 直接调用 where.exe，以独立参数传递命令名，避免经 cmd /C 解析导致命令注入
+        let output = Command::new("where")
+            .arg(name)
             .creation_flags(CREATE_NO_WINDOW)
             .output()
             .ok()?;
@@ -238,26 +240,68 @@ pub fn find_tool_path(name: &str) -> Option<String> {
 #[cfg(not(target_os = "windows"))]
 fn run_login_shell_command(cmd: &str) -> std::io::Result<Output> {
     let path = enriched_path();
-    let shell_cmd = format!(
-        "if [ -f ~/.bashrc ]; then source ~/.bashrc >/dev/null 2>/dev/null; fi; export PATH={}:$PATH; {}",
-        shell_escape(&path),
-        cmd
-    );
-    let mut child = Command::new("bash")
-        .args(["-lc", &shell_cmd])
+    // 优先使用 bash（可 source ~/.bashrc），无 bash 时降级到 sh，避免无 bash 环境（如 Alpine）下检测全部失效
+    let has_bash = which_in_enriched_path("bash");
+    // shell_cmd 需要拥有所有权，避免引用在 if 块结束时被 drop
+    let (shell, shell_args): (&str, Vec<String>) = if has_bash {
+        let shell_cmd = format!(
+            "if [ -f ~/.bashrc ]; then source ~/.bashrc >/dev/null 2>/dev/null; fi; export PATH={}:$PATH; {}",
+            shell_escape(&path),
+            cmd
+        );
+        ("bash", vec!["-lc".to_string(), shell_cmd])
+    } else {
+        let shell_cmd = format!(
+            "export PATH={}:$PATH; {}",
+            shell_escape(&path),
+            cmd
+        );
+        ("sh", vec!["-c".to_string(), shell_cmd])
+    };
+    let mut child = Command::new(shell)
+        .args(&shell_args)
         .env("PATH", &path)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()?;
 
+    // 在单独线程读取 stdout/stderr，避免管道缓冲写满后子进程阻塞导致死锁
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let stdout_handle = thread::spawn(move || -> Vec<u8> {
+        let mut buf = Vec::new();
+        if let Some(mut s) = stdout {
+            let _ = std::io::Read::read_to_end(&mut s, &mut buf);
+        }
+        buf
+    });
+    let stderr_handle = thread::spawn(move || -> Vec<u8> {
+        let mut buf = Vec::new();
+        if let Some(mut s) = stderr {
+            let _ = std::io::Read::read_to_end(&mut s, &mut buf);
+        }
+        buf
+    });
+
     let started = Instant::now();
     loop {
         match child.try_wait()? {
-            Some(_) => return child.wait_with_output(),
+            Some(status) => {
+                let stdout_output = stdout_handle.join().unwrap_or_default();
+                let stderr_output = stderr_handle.join().unwrap_or_default();
+                return Ok(Output {
+                    status,
+                    stdout: stdout_output,
+                    stderr: stderr_output,
+                });
+            }
             None if started.elapsed() >= SHELL_COMMAND_TIMEOUT => {
                 let _ = child.kill();
                 let _ = child.wait();
+                let _ = stdout_handle.join();
+                let _ = stderr_handle.join();
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
                     format!(
@@ -269,6 +313,18 @@ fn run_login_shell_command(cmd: &str) -> std::io::Result<Output> {
             None => thread::sleep(Duration::from_millis(50)),
         }
     }
+}
+
+#[cfg(not(target_os = "windows"))]
+fn which_in_enriched_path(cmd: &str) -> bool {
+    let path = enriched_path();
+    let paths: Vec<PathBuf> = env::split_paths(&path).collect();
+    for dir in &paths {
+        if dir.join(cmd).is_file() {
+            return true;
+        }
+    }
+    false
 }
 
 #[cfg(not(target_os = "windows"))]

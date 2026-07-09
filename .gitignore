@@ -65,3 +65,7 @@ release
 *.pid
 *.seed
 *.pid.lock
+
+
+# Code Agents
+.mimocode/

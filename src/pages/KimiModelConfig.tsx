@@ -42,6 +42,7 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
       }
       setSelectedKeys(keys);
       setDropdownAddedKeys(new Set());
+      setContextSizeOverrides({});
     } catch (err) {
       console.error('Failed to load data:', err);
       setKimiSettings({ providers: {}, models: {} });
@@ -51,11 +52,14 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
   }, []);
 
   useEffect(() => {
+    let cancelled = false;
     const init = async () => {
       await loadData();
+      if (cancelled) return;
       setLoading(false);
     };
     void init();
+    return () => { cancelled = true; };
   }, [loadData]);
 
   const dropdownOptions = useMemo(() => {
@@ -169,7 +173,7 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
   };
 
   const preview = useMemo(() => {
-    const selectedModels: KimiModel[] = [];
+    const selectedModels: { model: KimiModel; modelKey: string }[] = [];
     const newProviderIds: string[] = [];
 
     for (const item of modelList) {
@@ -178,7 +182,7 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
       if (item.source === 'existing') {
         const modelKey = item.key.replace('existing:', '');
         const m = kimiSettings.models[modelKey];
-        if (m) selectedModels.push(m);
+        if (m) selectedModels.push({ model: m, modelKey });
       } else if (item.provider_id) {
         newProviderIds.push(item.provider_id);
       }
@@ -213,8 +217,8 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
     config.providers = providersConfig;
 
     const modelsConfig: Record<string, unknown> = {};
-    for (const m of selectedModels) {
-      const contextSize = contextSizeOverrides[m.model] || m.max_context_size;
+    for (const { model: m, modelKey } of selectedModels) {
+      const contextSize = contextSizeOverrides[modelKey] || m.max_context_size;
       modelsConfig[m.model] = {
         provider: m.provider,
         model: m.model,
@@ -226,8 +230,9 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
     for (const pid of newProviderIds) {
       const p = providers.find((pr) => pr.id === pid);
       if (p) {
+        const providerOverrideKey = `provider:${pid}`;
         for (const m of p.models) {
-          const contextSize = contextSizeOverrides[m.id] || 128000;
+          const contextSize = contextSizeOverrides[providerOverrideKey] || 128000;
           modelsConfig[m.id] = {
             provider: `managed:${p.id}`,
             model: m.id,
@@ -287,6 +292,21 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
           // 应用用户修改的上下文窗口大小（避免只改了预览没落盘）
           const override = contextSizeOverrides[modelKey];
           keepModels.push(override !== undefined ? { ...m, max_context_size: override } : m);
+        }
+      } else if (item.source === 'provider' && item.provider_id) {
+        // 为 Provider 模型也构造 KimiModel，应用用户修改的上下文窗口大小
+        const providerOverrideKey = `provider:${item.provider_id}`;
+        const contextSize = contextSizeOverrides[providerOverrideKey] || 128000;
+        const p = providers.find((pr) => pr.id === item.provider_id);
+        if (p) {
+          for (const m of p.models) {
+            keepModels.push({
+              provider: `managed:${p.id}`,
+              model: m.id,
+              max_context_size: contextSize,
+              display_name: m.name,
+            });
+          }
         }
       }
     }
@@ -425,11 +445,27 @@ export function KimiModelConfig({ onClose, onOpenProviderMgmt }: KimiModelConfig
                                     className="kimi-context-input"
                                     value={currentContextSize}
                                     onChange={(e) => {
-                                      const value = parseInt(e.target.value) || 128000;
+                                      const raw = e.target.value;
+                                      if (raw === '') return; // 允许清空输入框，不立即覆盖
+                                      const value = parseInt(raw, 10);
+                                      if (Number.isNaN(value) || value < 1) return;
                                       setContextSizeOverrides((prev) => ({
                                         ...prev,
                                         [modelKey]: value,
                                       }));
+                                    }}
+                                    onBlur={(e) => {
+                                      // 失焦时若为空或非法，回退到默认值
+                                      const value = parseInt(e.target.value, 10);
+                                      if (Number.isNaN(value) || value < 1) {
+                                        const fallback = item.source === 'existing'
+                                          ? kimiSettings.models[modelKey]?.max_context_size
+                                          : 128000;
+                                        setContextSizeOverrides((prev) => ({
+                                          ...prev,
+                                          [modelKey]: fallback ?? 128000,
+                                        }));
+                                      }
                                     }}
                                     min={1}
                                     title="上下文窗口大小（tokens）"

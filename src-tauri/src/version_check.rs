@@ -27,7 +27,7 @@ pub fn check_for_updates(tools: &mut [CliTool]) {
         if tool.ignored {
             continue;
         }
-        if tool.current_version.is_empty() {
+        if tool.current_version.is_empty() || tool.current_version == "未知" {
             continue;
         }
         let Some(source) = version_sources.get(&tool.name) else {
@@ -63,6 +63,12 @@ pub fn check_for_updates(tools: &mut [CliTool]) {
 
         if tool.current_version.is_empty() {
             tool.status = ToolStatus::NotInstalled;
+            continue;
+        }
+
+        if tool.current_version == "未知" {
+            // 版本未知时无法判断更新，标记为错误而非误报有更新
+            tool.status = ToolStatus::Error;
             continue;
         }
 
@@ -185,17 +191,42 @@ fn run_command_with_timeout(
         .spawn()
         .map_err(|e| format!("Failed to start {}: {}", program, e))?;
 
+    // 在单独线程读取 stdout/stderr，避免管道缓冲写满后子进程阻塞导致死锁
+    let stdout = child.stdout.take();
+    let stderr = child.stderr.take();
+
+    let stdout_handle = thread::spawn(move || -> Vec<u8> {
+        let mut buf = Vec::new();
+        if let Some(mut s) = stdout {
+            let _ = std::io::Read::read_to_end(&mut s, &mut buf);
+        }
+        buf
+    });
+    let stderr_handle = thread::spawn(move || -> Vec<u8> {
+        let mut buf = Vec::new();
+        if let Some(mut s) = stderr {
+            let _ = std::io::Read::read_to_end(&mut s, &mut buf);
+        }
+        buf
+    });
+
     let started = Instant::now();
     loop {
         match child.try_wait() {
-            Ok(Some(_)) => {
-                return child
-                    .wait_with_output()
-                    .map_err(|e| format!("Failed to read {} output: {}", program, e));
+            Ok(Some(status)) => {
+                let stdout_output = stdout_handle.join().unwrap_or_default();
+                let stderr_output = stderr_handle.join().unwrap_or_default();
+                return Ok(Output {
+                    status,
+                    stdout: stdout_output,
+                    stderr: stderr_output,
+                });
             }
             Ok(None) if started.elapsed() >= timeout => {
                 let _ = child.kill();
-                let _ = child.wait_with_output();
+                let _ = child.wait();
+                let _ = stdout_handle.join();
+                let _ = stderr_handle.join();
                 return Err(format!(
                     "{} timed out after {}s",
                     program,

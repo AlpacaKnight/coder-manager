@@ -42,11 +42,12 @@ export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, o
   const [updateCommand, setUpdateCommand] = useState<string | null>(null);
 
   useEffect(() => {
-    if (tool?.name) {
-      invoke<string | null>('get_tool_update_command', { name: tool.name })
-        .then(setUpdateCommand)
-        .catch(() => setUpdateCommand(null));
-    }
+    if (!tool?.name) return;
+    let stale = false;
+    invoke<string | null>('get_tool_update_command', { name: tool.name })
+      .then((cmd) => { if (!stale) setUpdateCommand(cmd); })
+      .catch(() => { if (!stale) setUpdateCommand(null); });
+    return () => { stale = true; };
   }, [tool?.name]);
 
   if (!tool) {
@@ -56,7 +57,7 @@ export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, o
   const currentAction = activeAction ?? null;
   const isBusy = isUpdating || currentAction !== null;
   const isInstalled = tool.status !== 'NotInstalled' && Boolean(tool.current_version);
-  const canRecheck = !isRechecking;
+  const canRecheck = !isRechecking && !isBusy;
 
   const handleStatusClick = () => {
     if (canRecheck && onRecheck) {

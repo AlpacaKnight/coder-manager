@@ -92,13 +92,11 @@ coder-manager/
 |---------|------|--------|------|
 | `get_env_check` | 无 | `EnvCheck` | 检查环境依赖 |
 | `get_env_path` | `name: String` | `Option<String>` | 查找工具路径 |
-| `get_installed_tools` | 无 | `Vec<CliTool>` | 获取已安装工具列表 |
-| `refresh_tools` | 无 | `Vec<CliTool>` | 刷新工具列表 |
+| `get_tools_quick` | 无 | `Vec<CliTool>` | 快速获取已安装工具列表（不查网络版本） |
+| `get_tool_names` | 无 | `Vec<CliTool>` | 仅返回工具定义（秒开界面） |
 | `check_for_updates` | 无 | `Vec<CliTool>` | 检查更新 |
-| `update_single_tool` | `tool: CliTool` | `Result<String, String>` | 更新单个工具 |
 | `update_tool` | `name: String` | `Result<String, String>` | 按名称更新工具 |
-| `update_all_tools` | `tools: Vec<CliTool>` | `Vec<(String, Result<String, String>)>` | 批量更新 |
-| `batch_update_tools` | `names: Vec<String>` | `Vec<(String, Result<String, String>)>` | 按名称批量更新 |
+| `batch_update_tools` | `names: Vec<String>` | `Result<Vec<String>, String>` | 按名称批量更新 |
 | `get_config` | 无 | `AppConfig` | 获取配置 |
 | `save_config` | `config: AppConfig` | `Result<(), String>` | 保存配置 |
 | `ignore_tool` | `tool_name: String` | `Result<(), String>` | 忽略工具 |

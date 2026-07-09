@@ -2,12 +2,23 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 use std::process::Command;
+use std::thread;
 
 #[cfg(target_os = "windows")]
 use std::os::windows::process::CommandExt;
 
 #[cfg(target_os = "windows")]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
+
+/// 启动子进程后立即返回，同时在后台线程 wait 以 reap 僵尸进程。
+/// 避免了 spawn 丢弃 Child 产生的僵尸进程，也避免了 output 阻塞等待子进程。
+fn spawn_and_reap(cmd: &mut Command) -> Result<(), String> {
+    let child = cmd.spawn().map_err(|e| e.to_string())?;
+    thread::spawn(move || {
+        let _ = child.wait_with_output();
+    });
+    Ok(())
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModelEntry {
@@ -52,6 +63,7 @@ impl Provider {
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
+    #[serde(default)]
     pub ignored_tools: Vec<String>,
     pub last_check_time: Option<String>,
     #[serde(default)]
@@ -61,21 +73,30 @@ pub struct AppConfig {
 }
 
 impl AppConfig {
-    pub fn load() -> Self {
+    pub fn load() -> Result<Self, String> {
         let config_path = get_config_path();
-        let mut config = if config_path.exists() {
-            fs::read_to_string(&config_path)
-                .ok()
-                .and_then(|s| serde_json::from_str(&s).ok())
-                .unwrap_or_default()
-        } else {
-            Self::default()
+        if !config_path.exists() {
+            return Ok(Self::default());
+        }
+        let content = fs::read_to_string(&config_path).map_err(|e| e.to_string())?;
+        let mut config = match serde_json::from_str::<Self>(&content) {
+            Ok(c) => c,
+            Err(e) => {
+                // 配置文件损坏时先备份，再返回错误，避免后续 save 覆盖丢失数据
+                let bak = config_path.with_extension("json.bak");
+                let _ = fs::write(&bak, &content);
+                return Err(format!(
+                    "配置文件解析失败，已备份至 {}：{}",
+                    bak.display(),
+                    e
+                ));
+            }
         };
         // 向后兼容：把旧的 model_name 单字段迁移到 models 数组
         for p in &mut config.providers {
             p.migrate_model_name();
         }
-        config
+        Ok(config)
     }
 
     pub fn save(&self) -> Result<(), String> {
@@ -84,7 +105,18 @@ impl AppConfig {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
         }
         let json = serde_json::to_string_pretty(self).map_err(|e| e.to_string())?;
-        fs::write(&config_path, json).map_err(|e| e.to_string())
+        // 先写入临时文件，再原子替换，避免写入中途崩溃产生损坏文件
+        let tmp_path = config_path.with_extension("json.tmp");
+        fs::write(&tmp_path, &json).map_err(|e| e.to_string())?;
+        // rename 在 Windows 上目标文件已存在时可能因文件锁定而失败，先尝试删除旧文件
+        if config_path.exists() {
+            let _ = fs::remove_file(&config_path);
+        }
+        fs::rename(&tmp_path, &config_path).or_else(|e| {
+            // rename 失败时回退到直接写入，确保配置不丢失
+            let _ = fs::remove_file(&tmp_path);
+            fs::write(&config_path, &json).map_err(|e2| format!("rename 失败: {}, 直接写入也失败: {}", e, e2))
+        })
     }
 
     pub fn add_ignored(&mut self, tool_name: &str) {
@@ -108,7 +140,10 @@ impl AppConfig {
 
 pub fn get_qwen_settings_path() -> PathBuf {
     dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+        .unwrap_or_else(|| {
+            eprintln!("警告：无法获取 HOME 目录，回退到临时目录");
+            std::env::temp_dir()
+        })
         .join(".qwen")
         .join("settings.json")
 }
@@ -223,30 +258,6 @@ fn set_model_name(
     }
 }
 
-pub fn merge_providers_to_settings(settings: &mut serde_json::Value, providers: &[Provider]) {
-    if !settings.is_object() {
-        *settings = serde_json::json!({});
-    }
-    let obj = settings.as_object_mut().unwrap();
-    obj.insert("$version".to_string(), serde_json::json!(4));
-
-    let mut openai_providers: Vec<serde_json::Value> = Vec::new();
-    let mut anthropic_providers: Vec<serde_json::Value> = Vec::new();
-
-    for p in providers {
-        let entries = provider_to_entries(p);
-        match p.provider_type.as_str() {
-            "anthropic" => anthropic_providers.extend(entries),
-            _ => openai_providers.extend(entries),
-        }
-    }
-
-    set_model_providers(obj, &openai_providers, &anthropic_providers);
-    set_security_auth(obj, providers);
-    set_env_keys(obj, providers);
-    set_model_name(obj, &openai_providers, &anthropic_providers);
-}
-
 pub fn apply_qwen_model_config(
     settings: &mut serde_json::Value,
     openai_models: &[QwenModelEntry],
@@ -297,7 +308,10 @@ pub struct QwenModelEntry {
 
 fn get_config_path() -> PathBuf {
     dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+        .unwrap_or_else(|| {
+            eprintln!("警告：无法获取配置目录，回退到临时目录");
+            std::env::temp_dir()
+        })
         .join("cli-tool-manager")
         .join("config.json")
 }
@@ -313,7 +327,10 @@ fn chrono_lite_now() -> String {
 // Kimi Code 配置相关
 pub fn get_kimi_config_path() -> PathBuf {
     dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+        .unwrap_or_else(|| {
+            eprintln!("警告：无法获取 HOME 目录，回退到临时目录");
+            std::env::temp_dir()
+        })
         .join(".kimi-code")
         .join("config.toml")
 }
@@ -379,27 +396,24 @@ pub fn open_kimi_config_file() -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", "", &path_str])
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "start", "", &path_str])
+            .creation_flags(CREATE_NO_WINDOW);
+        spawn_and_reap(&mut cmd)?;
     }
 
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
-            .arg(&path_str)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = Command::new("open");
+        cmd.arg(&path_str);
+        spawn_and_reap(&mut cmd)?;
     }
 
     #[cfg(target_os = "linux")]
     {
-        Command::new("xdg-open")
-            .arg(&path_str)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = Command::new("xdg-open");
+        cmd.arg(&path_str);
+        spawn_and_reap(&mut cmd)?;
     }
 
     Ok(())
@@ -408,7 +422,10 @@ pub fn open_kimi_config_file() -> Result<(), String> {
 // OpenCode 配置相关
 pub fn get_opencode_config_path() -> PathBuf {
     dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+        .unwrap_or_else(|| {
+            eprintln!("警告：无法获取 HOME 目录，回退到临时目录");
+            std::env::temp_dir()
+        })
         .join(".config")
         .join("opencode")
         .join("opencode.json")
@@ -467,27 +484,24 @@ pub fn open_opencode_config_file() -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", "", &path_str])
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "start", "", &path_str])
+            .creation_flags(CREATE_NO_WINDOW);
+        spawn_and_reap(&mut cmd)?;
     }
 
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
-            .arg(&path_str)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = Command::new("open");
+        cmd.arg(&path_str);
+        spawn_and_reap(&mut cmd)?;
     }
 
     #[cfg(target_os = "linux")]
     {
-        Command::new("xdg-open")
-            .arg(&path_str)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = Command::new("xdg-open");
+        cmd.arg(&path_str);
+        spawn_and_reap(&mut cmd)?;
     }
 
     Ok(())
@@ -542,13 +556,7 @@ pub fn apply_kimi_model_config(
     // 先清空，再按前端传入的选中集合重建（让模型级删除真正生效）
     settings.models.clear();
 
-    // 保留用户勾选的自定义模型
-    for m in custom_models {
-        let key = m.model.clone();
-        settings.models.insert(key, m);
-    }
-
-    // 将 Provider 转换为 Kimi 配置格式并添加
+    // 先将 Provider 转换为 Kimi 配置格式并添加（使用默认上下文大小）
     for p in providers {
         let provider_key = format!("managed:{}", p.id);
         let provider_type = match p.provider_type.as_str() {
@@ -580,6 +588,12 @@ pub fn apply_kimi_model_config(
         }
     }
 
+    // 再插入用户自定义模型（可覆盖 Provider 模型的 max_context_size 等字段）
+    for m in custom_models {
+        let key = m.model.clone();
+        settings.models.insert(key, m);
+    }
+
     // 清理已无模型引用的孤立 provider（删除干净）
     settings
         .providers
@@ -592,14 +606,18 @@ pub fn apply_kimi_model_config(
         .map(|d| !settings.models.contains_key(d))
         .unwrap_or(true)
     {
-        settings.default_model = settings.models.keys().next().cloned();
+        // 按 key 排序取最小的，避免 HashMap 顺序不确定导致每次选中不同模型
+        settings.default_model = settings.models.keys().min().cloned();
     }
 }
 
 // CodeBuddy 配置相关
 pub fn get_codebuddy_models_config_path() -> PathBuf {
     dirs::home_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
+        .unwrap_or_else(|| {
+            eprintln!("警告：无法获取 HOME 目录，回退到临时目录");
+            std::env::temp_dir()
+        })
         .join(".codebuddy")
         .join("models.json")
 }
@@ -664,27 +682,24 @@ pub fn open_codebuddy_models_config_file() -> Result<(), String> {
 
     #[cfg(target_os = "windows")]
     {
-        Command::new("cmd")
-            .args(["/C", "start", "", &path_str])
-            .creation_flags(CREATE_NO_WINDOW)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = Command::new("cmd");
+        cmd.args(["/C", "start", "", &path_str])
+            .creation_flags(CREATE_NO_WINDOW);
+        spawn_and_reap(&mut cmd)?;
     }
 
     #[cfg(target_os = "macos")]
     {
-        Command::new("open")
-            .arg(&path_str)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = Command::new("open");
+        cmd.arg(&path_str);
+        spawn_and_reap(&mut cmd)?;
     }
 
     #[cfg(target_os = "linux")]
     {
-        Command::new("xdg-open")
-            .arg(&path_str)
-            .spawn()
-            .map_err(|e| e.to_string())?;
+        let mut cmd = Command::new("xdg-open");
+        cmd.arg(&path_str);
+        spawn_and_reap(&mut cmd)?;
     }
 
     Ok(())
@@ -696,21 +711,33 @@ pub fn apply_codebuddy_model_config(
     provider_ids: &[String],
     providers: &[Provider],
 ) {
-    // 保留用户已有的自定义模型
-    let existing_models: Vec<CodeBuddyModelEntry> = custom_models;
+    use std::collections::HashSet;
 
     // 清空模型列表，重新构建
     config.models.clear();
 
-    // 添加用户选择的已有模型
-    for m in existing_models {
-        config.models.push(m);
+    // 记录已添加的模型 id，避免重复
+    let mut seen_ids: HashSet<String> = HashSet::new();
+
+    // 保留用户已有的自定义模型
+    for m in custom_models {
+        if seen_ids.insert(m.id.clone()) {
+            config.models.push(m);
+        }
     }
 
     // 将 Provider 转换为 CodeBuddy 配置格式并添加
     for pid in provider_ids {
         if let Some(p) = providers.iter().find(|pr| &pr.id == pid) {
+            let endpoint = if p.provider_type == "anthropic" {
+                format!("{}/v1/messages", p.api_base_url.trim_end_matches('/'))
+            } else {
+                format!("{}/chat/completions", p.api_base_url.trim_end_matches('/'))
+            };
             for m in &p.models {
+                if !seen_ids.insert(m.id.clone()) {
+                    continue;
+                }
                 let model = CodeBuddyModelEntry {
                     id: m.id.clone(),
                     name: Some(m.name.clone()),
@@ -718,7 +745,7 @@ pub fn apply_codebuddy_model_config(
                     api_key: Some(p.api_key.clone()),
                     max_input_tokens: Some(128000),
                     max_output_tokens: Some(4096),
-                    url: Some(format!("{}/chat/completions", p.api_base_url.trim_end_matches('/'))),
+                    url: Some(endpoint.clone()),
                     supports_tool_call: Some(true),
                     supports_images: Some(false),
                     supports_reasoning: None,
