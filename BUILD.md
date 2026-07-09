@@ -29,7 +29,7 @@ xcode-select --install
 # Install dependencies
 npm install
 
-# Build current platform (includes installer + portable)
+# Build current platform
 npm run build:current
 
 # Build specific platform (must run on target platform)
@@ -42,6 +42,7 @@ npm run build:linux
 
 #### Windows (PowerShell)
 ```powershell
+npm install
 .\scripts\build.ps1           # Build current platform
 .\scripts\build.ps1 current   # Build current platform
 .\scripts\build.ps1 all       # Show multi-platform build instructions

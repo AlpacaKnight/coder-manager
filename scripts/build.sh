@@ -52,12 +52,20 @@ check_dependencies() {
 
 # Install npm dependencies
 install_deps() {
-    info "Installing npm dependencies..."
-    npm install
+    if [ -f "package-lock.json" ]; then
+        info "Installing npm dependencies from lockfile..."
+        npm ci
+    else
+        info "Installing npm dependencies..."
+        npm install
+    fi
 }
 
 # Build current platform
 build_current() {
+    info "Cleaning previous bundle artifacts..."
+    rm -rf src-tauri/target/release/bundle
+
     info "Building current platform..."
     npm run tauri build
 }
