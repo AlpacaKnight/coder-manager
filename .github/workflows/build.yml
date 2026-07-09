@@ -97,7 +97,7 @@ jobs:
             src-tauri/target/release/bundle/**/*.AppImage
             src-tauri/target/release/bundle/**/*.deb
             src-tauri/target/release/bundle/**/*.rpm
-          if-no-files-found: error
+          if-no-files-found: warn
           retention-days: 7
 
   # 手动触发时构建所有平台
