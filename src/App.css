@@ -1315,3 +1315,81 @@ body {
 .btn-toggle-password:hover {
   opacity: 1;
 }
+
+/* 命令查看弹窗 */
+.command-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.command-modal {
+  background: #16213e;
+  border: 1px solid #0f3460;
+  border-radius: 8px;
+  padding: 20px;
+  max-width: 600px;
+  width: 90%;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.command-modal-header h3 {
+  font-size: 15px;
+  color: #eaeaea;
+  margin-bottom: 12px;
+}
+
+.command-modal-body {
+  background: #0a0e1a;
+  border: 1px solid #1a2332;
+  border-radius: 6px;
+  padding: 12px;
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 13px;
+  color: #8fbc8f;
+  word-break: break-all;
+  white-space: pre-wrap;
+  margin-bottom: 16px;
+}
+
+.command-modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.command-modal-actions .btn-copy,
+.command-modal-actions .btn-close-modal {
+  padding: 8px 16px;
+  border: 1px solid #0f3460;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.command-modal-actions .btn-copy {
+  background: #0f3460;
+  color: #eaeaea;
+}
+
+.command-modal-actions .btn-copy:hover {
+  background: #1a4a7a;
+}
+
+.command-modal-actions .btn-close-modal {
+  background: transparent;
+  color: #888;
+}
+
+.command-modal-actions .btn-close-modal:hover {
+  color: #eaeaea;
+  border-color: #333;
+}

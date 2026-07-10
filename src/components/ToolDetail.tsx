@@ -40,6 +40,18 @@ const statusClasses: Record<string, string> = {
 
 export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, onRecheck, onOpenModelConfig, onOpenKimiModelConfig, onOpenOpenCodeModelConfig, onOpenCodeBuddyModelConfig, isUpdating, isRechecking, activeAction }: ToolDetailProps) {
   const [updateCommand, setUpdateCommand] = useState<string | null>(null);
+  const [modalCmd, setModalCmd] = useState<{ title: string; cmd: string } | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  // 复制命令到剪贴板，并短暂提示"已复制"
+  const copyToClipboard = (cmd: string) => {
+    navigator.clipboard.writeText(cmd).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(() => {
+      // 剪贴板失败时退回选中文本供用户手动复制
+    });
+  };
 
   useEffect(() => {
     if (!tool?.name) return;
@@ -118,9 +130,7 @@ export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, o
         {isInstalled && updateCommand && (
           <button
             className="btn-install-manual"
-            onClick={() => {
-              alert(`更新命令: ${updateCommand}`);
-            }}
+            onClick={() => setModalCmd({ title: '更新命令', cmd: updateCommand })}
           >
             查看更新命令
           </button>
@@ -195,7 +205,7 @@ export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, o
               className="btn-install-manual"
               onClick={() => {
                 if (tool.install_command) {
-                  alert(`安装命令: ${tool.install_command}`);
+                  setModalCmd({ title: '安装命令', cmd: tool.install_command });
                 }
               }}
             >
@@ -204,6 +214,31 @@ export function ToolDetail({ tool, onUpdate, onInstall, onUninstall, onIgnore, o
           </>
         )}
       </div>
+
+      {modalCmd && (
+        <div className="command-modal-overlay" onClick={() => setModalCmd(null)}>
+          <div className="command-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="command-modal-header">
+              <h3>{modalCmd.title}</h3>
+            </div>
+            <pre className="command-modal-body">{modalCmd.cmd}</pre>
+            <div className="command-modal-actions">
+              <button
+                className="btn-copy"
+                onClick={() => copyToClipboard(modalCmd.cmd)}
+              >
+                {copied ? '✓ 已复制' : '复制'}
+              </button>
+              <button
+                className="btn-close-modal"
+                onClick={() => setModalCmd(null)}
+              >
+                关闭
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -91,21 +91,6 @@ impl CliToolsRegistry {
                 update_command_unix: None,
             },
             CliToolDefinition {
-                name: "gemini".to_string(),
-                display_name: "Gemini CLI".to_string(),
-                command_name: None,
-                version_command: "gemini --version".to_string(),
-                version_regex: r"(\d+\.\d+\.\d+)".to_string(),
-                latest_version_source: LatestVersionSource::Npm("@google/gemini-cli".to_string()),
-                can_auto_update: true,
-                update_command: "npm install -g @google/gemini-cli".to_string(),
-                install_command: "npm install -g @google/gemini-cli".to_string(),
-                #[cfg(not(target_os = "windows"))]
-                install_command_unix: None,
-                #[cfg(not(target_os = "windows"))]
-                update_command_unix: None,
-            },
-            CliToolDefinition {
                 name: "opencode".to_string(),
                 display_name: "OpenCode".to_string(),
                 command_name: None,
@@ -121,15 +106,15 @@ impl CliToolsRegistry {
                 update_command_unix: None,
             },
             CliToolDefinition {
-                name: "qwen".to_string(),
-                display_name: "QwenCode".to_string(),
-                command_name: None,
-                version_command: "qwen -v".to_string(),
+                name: "mimocode".to_string(),
+                display_name: "MiMo Code".to_string(),
+                command_name: Some("mimo".to_string()),
+                version_command: "mimo --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
-                latest_version_source: LatestVersionSource::Npm("@qwen-code/qwen-code".to_string()),
+                latest_version_source: LatestVersionSource::Npm("@mimo-ai/cli".to_string()),
                 can_auto_update: true,
-                update_command: "npm install -g @qwen-code/qwen-code@latest".to_string(),
-                install_command: "npm install -g @qwen-code/qwen-code@latest".to_string(),
+                update_command: "npm install -g @mimo-ai/cli".to_string(),
+                install_command: "npm install -g @mimo-ai/cli".to_string(),
                 #[cfg(not(target_os = "windows"))]
                 install_command_unix: None,
                 #[cfg(not(target_os = "windows"))]
@@ -153,15 +138,15 @@ impl CliToolsRegistry {
                 update_command_unix: Some("curl -fsSL https://code.kimi.com/kimi-code/install.sh | bash".to_string()),
             },
             CliToolDefinition {
-                name: "deepcode".to_string(),
-                display_name: "deepcode-cli".to_string(),
+                name: "qwen".to_string(),
+                display_name: "QwenCode".to_string(),
                 command_name: None,
-                version_command: "deepcode --version".to_string(),
+                version_command: "qwen -v".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
-                latest_version_source: LatestVersionSource::Npm("@vegamo/deepcode-cli".to_string()),
+                latest_version_source: LatestVersionSource::Npm("@qwen-code/qwen-code".to_string()),
                 can_auto_update: true,
-                update_command: "npm install -g @vegamo/deepcode-cli".to_string(),
-                install_command: "npm install -g @vegamo/deepcode-cli".to_string(),
+                update_command: "npm install -g @qwen-code/qwen-code@latest".to_string(),
+                install_command: "npm install -g @qwen-code/qwen-code@latest".to_string(),
                 #[cfg(not(target_os = "windows"))]
                 install_command_unix: None,
                 #[cfg(not(target_os = "windows"))]
@@ -179,6 +164,21 @@ impl CliToolsRegistry {
                 can_auto_update: true,
                 update_command: "npm install -g @tencent-ai/codebuddy-code".to_string(),
                 install_command: "npm install -g @tencent-ai/codebuddy-code".to_string(),
+                #[cfg(not(target_os = "windows"))]
+                install_command_unix: None,
+                #[cfg(not(target_os = "windows"))]
+                update_command_unix: None,
+            },
+            CliToolDefinition {
+                name: "deepcode".to_string(),
+                display_name: "deepcode-cli".to_string(),
+                command_name: None,
+                version_command: "deepcode --version".to_string(),
+                version_regex: r"(\d+\.\d+\.\d+)".to_string(),
+                latest_version_source: LatestVersionSource::Npm("@vegamo/deepcode-cli".to_string()),
+                can_auto_update: true,
+                update_command: "npm install -g @vegamo/deepcode-cli".to_string(),
+                install_command: "npm install -g @vegamo/deepcode-cli".to_string(),
                 #[cfg(not(target_os = "windows"))]
                 install_command_unix: None,
                 #[cfg(not(target_os = "windows"))]
@@ -215,15 +215,15 @@ impl CliToolsRegistry {
                 update_command_unix: None,
             },
             CliToolDefinition {
-                name: "mimocode".to_string(),
-                display_name: "MiMo Code".to_string(),
-                command_name: Some("mimo".to_string()),
-                version_command: "mimo --version".to_string(),
+                name: "gemini".to_string(),
+                display_name: "Gemini CLI".to_string(),
+                command_name: None,
+                version_command: "gemini --version".to_string(),
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
-                latest_version_source: LatestVersionSource::Npm("@mimo-ai/cli".to_string()),
+                latest_version_source: LatestVersionSource::Npm("@google/gemini-cli".to_string()),
                 can_auto_update: true,
-                update_command: "npm install -g @mimo-ai/cli".to_string(),
-                install_command: "npm install -g @mimo-ai/cli".to_string(),
+                update_command: "npm install -g @google/gemini-cli".to_string(),
+                install_command: "npm install -g @google/gemini-cli".to_string(),
                 #[cfg(not(target_os = "windows"))]
                 install_command_unix: None,
                 #[cfg(not(target_os = "windows"))]
