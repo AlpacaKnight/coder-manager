@@ -108,22 +108,22 @@ async fn get_tool_names() -> Result<Vec<CliTool>, String> {
 
         let tools: Vec<CliTool> = definitions
             .into_iter()
-            .map(|def| CliTool {
-                name: def.name.clone(),
-                display_name: def.display_name,
-                current_version: String::new(),
-                latest_version: None,
-                path: None,
-                update_available: false,
-                can_auto_update: def.can_auto_update,
-                install_command: def.install_command,
-                update_command: if def.update_command.is_empty() {
-                    None
-                } else {
-                    Some(def.update_command)
-                },
-                ignored: ignored.contains(&def.name.to_lowercase()),
-                status: cli_tools::ToolStatus::Checking,
+            .map(|def| {
+                let install_cmd = detection::platform_install_command(&def);
+                let update_cmd = detection::platform_update_command(&def);
+                CliTool {
+                    name: def.name.clone(),
+                    display_name: def.display_name,
+                    current_version: String::new(),
+                    latest_version: None,
+                    path: None,
+                    update_available: false,
+                    can_auto_update: def.can_auto_update,
+                    install_command: install_cmd,
+                    update_command: update_cmd,
+                    ignored: ignored.contains(&def.name.to_lowercase()),
+                    status: cli_tools::ToolStatus::Checking,
+                }
             })
             .collect();
 

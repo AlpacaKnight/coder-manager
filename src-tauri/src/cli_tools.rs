@@ -101,9 +101,9 @@ impl CliToolsRegistry {
                 update_command: "npm install -g opencode-ai".to_string(),
                 install_command: "npm install -g opencode-ai".to_string(),
                 #[cfg(not(target_os = "windows"))]
-                install_command_unix: None,
+                install_command_unix: Some("curl -fsSL https://opencode.ai/install | bash".to_string()),
                 #[cfg(not(target_os = "windows"))]
-                update_command_unix: None,
+                update_command_unix: Some("curl -fsSL https://opencode.ai/install | bash".to_string()),
             },
             CliToolDefinition {
                 name: "mimocode".to_string(),
@@ -116,9 +116,9 @@ impl CliToolsRegistry {
                 update_command: "npm install -g @mimo-ai/cli".to_string(),
                 install_command: "npm install -g @mimo-ai/cli".to_string(),
                 #[cfg(not(target_os = "windows"))]
-                install_command_unix: None,
+                install_command_unix: Some("curl -fsSL https://mimo.xiaomi.com/install | bash".to_string()),
                 #[cfg(not(target_os = "windows"))]
-                update_command_unix: None,
+                update_command_unix: Some("curl -fsSL https://mimo.xiaomi.com/install | bash".to_string()),
             },
             CliToolDefinition {
                 name: "kimi".to_string(),
@@ -192,10 +192,10 @@ impl CliToolsRegistry {
                 version_regex: r"(\d+\.\d+\.\d+)".to_string(),
                 latest_version_source: LatestVersionSource::Npm("@kilocode/cli".to_string()),
                 can_auto_update: true,
-                update_command: "npm install -g @kilocode/cli".to_string(),
+                update_command: "kilo upgrade".to_string(),
                 install_command: "npm install -g @kilocode/cli".to_string(),
                 #[cfg(not(target_os = "windows"))]
-                install_command_unix: None,
+                install_command_unix: Some("curl -fsSL https://kilo.ai/cli/install | bash".to_string()),
                 #[cfg(not(target_os = "windows"))]
                 update_command_unix: None,
             },

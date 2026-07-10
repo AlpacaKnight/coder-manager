@@ -110,8 +110,8 @@ fn detect_tool(definition: &CliToolDefinition, ignored: &[String]) -> CliTool {
             path,
             update_available: false,
             can_auto_update: definition.can_auto_update,
-            install_command: definition.install_command.clone(),
-            update_command: command_option(&definition.update_command),
+            install_command: platform_install_command(definition),
+            update_command: platform_update_command(definition),
             ignored: is_ignored,
             status: if is_ignored {
                 ToolStatus::Ignored
@@ -129,8 +129,8 @@ fn detect_tool(definition: &CliToolDefinition, ignored: &[String]) -> CliTool {
             path: None,
             update_available: false,
             can_auto_update: definition.can_auto_update,
-            install_command: definition.install_command.clone(),
-            update_command: command_option(&definition.update_command),
+            install_command: platform_install_command(definition),
+            update_command: platform_update_command(definition),
             ignored: is_ignored,
             status: if is_ignored {
                 ToolStatus::Ignored
@@ -175,6 +175,28 @@ fn command_option(command: &str) -> Option<String> {
     } else {
         Some(command.to_string())
     }
+}
+
+/// 在非 Windows 平台优先返回 Unix 专属安装命令，否则返回通用命令
+pub fn platform_install_command(definition: &CliToolDefinition) -> String {
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(cmd) = &definition.install_command_unix {
+            return cmd.clone();
+        }
+    }
+    definition.install_command.clone()
+}
+
+/// 在非 Windows 平台优先返回 Unix 专属更新命令，否则返回通用命令
+pub fn platform_update_command(definition: &CliToolDefinition) -> Option<String> {
+    #[cfg(not(target_os = "windows"))]
+    {
+        if let Some(cmd) = &definition.update_command_unix {
+            return command_option(cmd);
+        }
+    }
+    command_option(&definition.update_command)
 }
 
 fn non_empty_line(line: &str) -> Option<String> {
@@ -353,6 +375,8 @@ pub(crate) fn enriched_path() -> String {
         push_existing_path(&mut paths, &mut seen, home.join(".volta/bin"));
         push_existing_path(&mut paths, &mut seen, home.join(".asdf/shims"));
         push_existing_path(&mut paths, &mut seen, home.join(".fnm/aliases/default/bin"));
+        push_existing_path(&mut paths, &mut seen, home.join(".kilo/bin"));
+        push_existing_path(&mut paths, &mut seen, home.join(".opencode/bin"));
 
         push_node_version_bins(&mut paths, &mut seen, &home.join(".nvm/versions/node"));
         push_node_version_bins(
