@@ -25,7 +25,7 @@ jobs:
           - platform: windows-latest
             target: windows
             args: ''
-          - platform: macos-latest
+          - platform: macos-15
             target: macos
             args: '--target universal-apple-darwin'
           - platform: ubuntu-22.04
@@ -74,7 +74,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }} # 仅在推送 tag 时创建 Release
+          tagName: ${{ github.ref_name }} # Create Release only when pushing a tag
           releaseName: 'CoderManager ${{ github.ref_name }}'
           releaseBody: 'See the assets to download and install this version.'
           releaseDraft: true
@@ -97,10 +97,12 @@ jobs:
             src-tauri/target/release/bundle/**/*.AppImage
             src-tauri/target/release/bundle/**/*.deb
             src-tauri/target/release/bundle/**/*.rpm
+            src-tauri/target/*/release/bundle/**/*.dmg
+            src-tauri/target/*/release/bundle/**/*.app
           if-no-files-found: warn
           retention-days: 7
 
-  # 手动触发时构建所有平台
+  # Build all platforms when manually triggered
   build-all:
     if: github.event_name == 'workflow_dispatch'
     needs: build
