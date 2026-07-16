@@ -1,0 +1,6 @@
+# 防止 conda 等环境管理工具把 cc/gcc 重定向到自带工具链，
+# 导致 Rust 链接时使用错误的 sysroot 而报
+# "undefined symbol: __libc_csu_fini / __libc_csu_init"。
+# 使用仓库内的选择脚本：优先系统 gcc，缺失时回退到可用的 gcc/cc/clang。
+[target.x86_64-unknown-linux-gnu]
+linker = "scripts/rust-linker.sh"

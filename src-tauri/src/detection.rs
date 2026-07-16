@@ -377,6 +377,28 @@ pub(crate) fn enriched_path() -> String {
         push_existing_path(&mut paths, &mut seen, home.join(".fnm/aliases/default/bin"));
         push_existing_path(&mut paths, &mut seen, home.join(".kilo/bin"));
         push_existing_path(&mut paths, &mut seen, home.join(".opencode/bin"));
+        push_existing_path(&mut paths, &mut seen, home.join(".mimocode/bin"));
+
+        // pnpm 全局 bin（优先环境变量 PNPM_HOME，回退默认目录）
+        if let Some(pnpm_home) = env::var_os("PNPM_HOME").map(PathBuf::from) {
+            push_existing_path(&mut paths, &mut seen, pnpm_home);
+        }
+        push_existing_path(&mut paths, &mut seen, home.join(".local/share/pnpm"));
+        push_existing_path(&mut paths, &mut seen, home.join(".pnpm-global/bin"));
+
+        // yarn 全局 bin
+        push_existing_path(&mut paths, &mut seen, home.join(".yarn/bin"));
+        push_existing_path(
+            &mut paths,
+            &mut seen,
+            home.join(".config/yarn/global/node_modules/.bin"),
+        );
+
+        // bun 全局 bin（优先环境变量 BUN_INSTALL，回退 ~/.bun/bin）
+        if let Some(bun_install) = env::var_os("BUN_INSTALL").map(PathBuf::from) {
+            push_existing_path(&mut paths, &mut seen, bun_install.join("bin"));
+        }
+        push_existing_path(&mut paths, &mut seen, home.join(".bun/bin"));
 
         push_node_version_bins(&mut paths, &mut seen, &home.join(".nvm/versions/node"));
         push_node_version_bins(

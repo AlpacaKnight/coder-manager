@@ -138,6 +138,7 @@ A: Check the following:
 1. Node.js and Rust are correctly installed
 2. Dependencies are installed (`npm install`)
 3. Check build logs for specific errors
+4. **conda 环境干扰（Linux）**：若终端激活了 anaconda/miniconda，`cc`/`gcc` 会被重定向到 conda 自带工具链，导致 Rust 链接报 `undefined symbol: __libc_csu_fini / __libc_csu_init`。项目通过 `src-tauri/.cargo/scripts/rust-linker.sh` 优先使用系统 `gcc`，并在系统 gcc 不存在时回退到可用编译器；如仍报错，先 `conda deactivate` 再构建。
 
 ### Q: How to customize app icon?
 A: Replace icon files in `src-tauri/icons/` directory, then rebuild.

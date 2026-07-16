@@ -22,6 +22,8 @@
 - `npm run lint`：使用 ESLint 检查 TypeScript/React 代码。
 - `npm run preview`：预览前端构建结果。
 
+- **Linux 下 conda 环境干扰**：若终端激活了 anaconda/miniconda，其 `cc`/`gcc` 会被重定向到 conda 自带工具链，导致 Rust 链接报 `undefined symbol: __libc_csu_fini / __libc_csu_init`。项目通过 `src-tauri/.cargo/scripts/rust-linker.sh` 优先使用系统 `gcc`，并在系统 gcc 不存在时回退到可用编译器；如仍报错，先 `conda deactivate` 再构建。
+
 当前未配置测试脚本。提交前至少运行 `npm run lint` 和 `npm run build`；涉及 Rust 后端或 Tauri 命令的改动，还应运行 `npm run tauri dev` 做手动验证。
 
 ## 前端代码架构要点

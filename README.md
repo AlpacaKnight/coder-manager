@@ -43,6 +43,7 @@
 
 - **应用入口与主事件循环注册**：[src-tauri/src/lib.rs](src-tauri/src/lib.rs)
 - **多平台 CLI 工具核心定义与元信息**：[src-tauri/src/cli_tools.rs](src-tauri/src/cli_tools.rs)
+- **CLI 工具本地检测与版本解析（含多包管理器全局目录兜底）**：[src-tauri/src/detection.rs](src-tauri/src/detection.rs)
 - **前端核心并发调度与精细化状态机**：[src/App.tsx](src/App.tsx)
 - **无阻塞顶部系统环境面板**：[src/components/Header.tsx](src/components/Header.tsx)
 - **高级拖拽与排序列表展示**：[src/components/ToolList.tsx](src/components/ToolList.tsx)
